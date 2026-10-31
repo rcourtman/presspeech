@@ -17,6 +17,7 @@
 #   ./ship-swift.sh --skip-qa       # emergencies only: skip self-tests, smoke test, CI-green gate
 #   ./ship-swift.sh --cask-only 0.2.5 # resume: redo only the Cask stage for a published release
 #   ./ship-swift.sh --self-test     # exercise release helper checks, no build/release
+#   ./ship-swift.sh --build-run ID # sign a verified hosted build without local compilation
 #
 # Pre-flight requires:
 #   - clean working tree on `main`
@@ -73,6 +74,8 @@ SELF_TEST=0
 SKIP_QA=0
 CASK_ONLY=0
 CASK_ONLY_VERSION=""
+BUILD_RUN=""
+PREBUILT_DIR=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --patch)   BUMP=patch; shift ;;
@@ -82,6 +85,9 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=1; shift ;;
         --no-cask) NO_CASK=1; shift ;;
         --skip-qa) SKIP_QA=1; shift ;;
+        --build-run)
+            [[ $# -ge 2 ]] || { echo "--build-run needs a workflow run ID" >&2; exit 1; }
+            BUILD_RUN="$2"; shift 2 ;;
         --cask-only)
             [[ $# -ge 2 ]] || { echo "--cask-only needs a version argument (X.Y.Z)" >&2; exit 1; }
             CASK_ONLY=1; CASK_ONLY_VERSION="$2"; shift 2 ;;
@@ -92,6 +98,11 @@ while [[ $# -gt 0 ]]; do
         *) echo "unknown arg: $1" >&2; exit 1 ;;
     esac
 done
+
+if [[ -n "$BUILD_RUN" ]]; then
+    [[ "$BUILD_RUN" =~ ^[0-9]+$ ]] || { echo "--build-run needs a workflow run ID" >&2; exit 1; }
+    [[ "$SKIP_QA" -eq 0 && "$CASK_ONLY" -eq 0 ]] || { echo "--build-run cannot skip QA or use cask-only mode" >&2; exit 1; }
+fi
 
 if [[ "$CASK_ONLY" -eq 1 && ( "$DRY_RUN" -eq 1 || "$NO_CASK" -eq 1 ) ]]; then
     echo "--cask-only cannot be combined with --dry-run or --no-cask" >&2
@@ -124,6 +135,7 @@ rollback_release_mutations_on_exit() {
         git -C "$PROJECT_DIR" checkout -- "$INFO_PLIST" "${DOC_SYNC_PATHS[@]}" >/dev/null 2>&1 || true
         rm -rf "$APP"
     fi
+    if [[ -n "$PREBUILT_DIR" ]]; then rm -rf "$PREBUILT_DIR"; fi
 }
 trap rollback_release_mutations_on_exit EXIT
 
@@ -760,6 +772,7 @@ EOF
         rewrite_cask_file "$cask_file" "4.5.6" "not-a-sha"
 
     /usr/bin/python3 "$PROJECT_DIR/scripts/test-cask-preflight.py"
+    /usr/bin/python3 "$PROJECT_DIR/scripts/test-macos-build-artifact.py"
     rm -rf "$tmpdir"
     say "Release script self-test passed"
 }
@@ -937,6 +950,20 @@ else
         say "Main push check workflow is green for HEAD"
     fi
 
+    if [[ -n "$BUILD_RUN" ]]; then
+        say "Downloading approved hosted Mac build $BUILD_RUN"
+        PREBUILT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-release-build.XXXXXX")"
+        gh api --hostname github.com --method GET \
+            "repos/rcourtman/presspeech/actions/runs/$BUILD_RUN" >"$PREBUILT_DIR/run.json"
+        gh run download "$BUILD_RUN" --repo rcourtman/presspeech \
+            --name macos-release-build --dir "$PREBUILT_DIR/payload"
+        /usr/bin/python3 "$PROJECT_DIR/scripts/macos-build-artifact.py" verify \
+            --root "$PROJECT_DIR" --directory "$PREBUILT_DIR/payload" \
+            --run-json "$PREBUILT_DIR/run.json" --sha "$head_sha" \
+            --version "$new_version" --build "$new_build" >/dev/null \
+            || die "hosted build provenance verification failed"
+        say "Hosted self-tests, packaged smoke and release build verified for approved source"
+    else
     say "Running debug self-test suite (same as CI)"
     ( cd "$SWIFT_DIR" && invoke_swift run -c debug Presspeech --self-test all ) \
         || die "swift self-test suite failed -- fix before shipping, or --skip-qa in an emergency"
@@ -944,14 +971,19 @@ else
     say "Running packaged-app smoke test"
     "$PROJECT_DIR/scripts/smoke-packaged-app.sh" \
         || die "packaged-app smoke test failed -- fix before shipping, or --skip-qa in an emergency"
+    fi
 fi
 
 # ---- 3. Build release-optimised binary ------------------------------------
+if [[ -n "$BUILD_RUN" ]]; then
+    BIN="$PREBUILT_DIR/payload/Presspeech"
+else
 say "Building (release)"
 ( cd "$SWIFT_DIR" && invoke_swift build -c release 2>&1 | tail -5 ) \
     || die "swift build failed"
 
 BIN="$SWIFT_DIR/.build/release/Presspeech"
+fi
 [[ -f "$BIN" ]] || die "release build produced no $BIN"
 
 # ---- 4. Bump Info.plist (before wrapping, so the .app carries new version)
@@ -969,6 +1001,10 @@ say "Wrapping in $APP"
 rm -rf "$APP" "$ZIP_OUT" "$ZIP_CHECKSUM" "$SWIFT_DIR/dist"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Presspeech"
+if [[ -n "$BUILD_RUN" ]]; then
+    cp "$PREBUILT_DIR/run.json" "$SWIFT_DIR/dist/hosted-build-run.json"
+    cp "$PREBUILT_DIR/payload/build-manifest.json" "$SWIFT_DIR/dist/hosted-build-manifest.json"
+fi
 cp "$INFO_PLIST" "$APP/Contents/Info.plist"
 cp "$SWIFT_DIR/Resources/presspeech-menubar.png"    "$APP/Contents/Resources/"
 cp "$SWIFT_DIR/Resources/presspeech-menubar@2x.png" "$APP/Contents/Resources/"
@@ -1026,6 +1062,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
         say "Stapling notarisation ticket"
         xcrun stapler staple "$APP"
         xcrun stapler validate "$APP"
+        spctl --assess --type execute --verbose=2 "$APP"
     else
         die "no notary credentials -- run xcrun notarytool store-credentials presspeech-notary first"
     fi

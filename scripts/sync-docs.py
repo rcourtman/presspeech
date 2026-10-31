@@ -54,6 +54,7 @@ SYNCED_PATHS = [
     CHANGELOG_MD,
     CHANGELOG_HTML,
     METADATA_PATH,
+    DOCS / "privacy" / "network-calls.json",
 ]
 
 # Hand-written project/privacy copy. Not rewritten, but scanned for stale
@@ -95,7 +96,7 @@ PUBLIC_RELEASE_SUFFIXES = {
 # names superseded versions and repeats claims that were true when each build
 # shipped. Current-copy scans skip it; --check still requires it to match the
 # tracked notes exactly.
-HISTORICAL_PUBLIC_PATHS = {CHANGELOG_HTML}
+HISTORICAL_PUBLIC_PATHS = {CHANGELOG_HTML, ROOT / "marketing" / "RELEASE_ENTRY_CORRECTIONS.md"}
 WINDOWS_RELEASE_REFERENCE_PATTERNS = [
     (
         re.compile(
@@ -276,7 +277,7 @@ ANCHORED_INSTALL_PREFLIGHTS = (
         "anchor": "direct-download",
         "platform": "macos",
         "version_key": "version",
-        "reviewed_version": ("0.3.8", "0.3.9", "0.3.10"),
+        "reviewed_version": ("0.3.8", "0.3.9", "0.3.10", "0.3.11"),
         "required": (
             "Before opening macOS 0.3.8",
             "missing-model download starts on launch",
@@ -291,17 +292,12 @@ ANCHORED_INSTALL_PREFLIGHTS = (
         "anchor": "download-verify-run",
         "platform": "windows",
         "version_key": "windows_version",
-        "reviewed_version": "0.1.12",
+        "reviewed_version": "0.1.13",
         "required": (
-            "Before launching Windows 0.1.12",
-            "missing-model download starts on launch",
-            "usage telemetry or an available token",
-            "custom routing can change where a token goes",
-            "TLS-inspecting HTTPS proxy",
-            "wait until Windows 0.1.13 is published",
-            "Launch Presspeech",
-            "unchecked on the final installer screen",
-            "full release-specific warning",
+            "Before launching Windows 0.1.13", "first-run default model download",
+            "Set Up Later", "account-token authentication and Hub telemetry are disabled",
+            "proxy and CA settings still apply", "TLS-inspecting proxy",
+            "Launch Presspeech", "unchecked on the final installer screen", "full release-specific warning",
         ),
     },
 )
@@ -316,7 +312,7 @@ CLIPBOARD_SERVICE_GUIDANCE = {
         "macOS Clipboard History",
         "Spotlight on macOS 26",
         "macOS Universal Clipboard",
-        "Upcoming Windows 0.1.13 asks Windows to exclude",
+        "Windows 0.1.13 and later asks Windows to exclude",
         "current clipboard remains readable",
     ),
     DOCS / "privacy.html": (
@@ -361,7 +357,7 @@ CLIPBOARD_SERVICE_GUIDANCE = {
         "enabled on macOS 26",
         "macOS Universal Clipboard",
         "Published Windows 0.1.12",
-        "Upcoming Windows 0.1.13",
+        "Windows 0.1.13 and later",
         "third-party managers",
     ),
 }
@@ -378,7 +374,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "HUGGINGFACE_CO_STAGING",
         "HF_HUB_USER_AGENT_ORIGIN",
         "configured endpoint",
-        "Upcoming Windows 0.1.13",
+        "Windows 0.1.13 and later",
         "Already used Windows 0.1.12?",
         "inherited",
         "staging setting",
@@ -399,7 +395,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "HF_HUB_USER_AGENT_ORIGIN",
         "configured endpoint",
         "These models do not require an account token",
-        "Upcoming Windows 0.1.13",
+        "Windows 0.1.13 and later",
         "disables implicit authentication",
         "Already used Windows 0.1.12?",
         "inherited",
@@ -421,7 +417,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "HF_HUB_USER_AGENT_ORIGIN",
         "configured endpoint",
         "public models do not require an account token",
-        "Upcoming Windows 0.1.13",
+        "Windows 0.1.13 and later",
         "implicit authentication",
     ),
     DOCS / "windows.html": (
@@ -435,7 +431,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "HF_HUB_USER_AGENT_ORIGIN",
         "configured endpoint",
         "These models do not require an account token",
-        "upcoming 0.1.13",
+        "0.1.13 and later",
         "Already used Windows 0.1.12?",
         "inherited",
         "staging setting",
@@ -456,7 +452,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "HF_HUB_USER_AGENT_ORIGIN",
         "configured endpoint",
         "These public models do not require an account token",
-        "Upcoming 0.1.13",
+        "0.1.13 and later",
         "disables implicit authentication",
         "Already used Windows 0.1.12?",
         "inherited",
@@ -624,7 +620,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "published Windows 0.1.12 build",
         "usage telemetry enabled",
         "avoid this possible usage telemetry",
-        "wait for 0.1.13",
+        "choose 0.1.13 or later",
         "keep the app unopened",
     ),
     DOCS / "index.html": (
@@ -635,7 +631,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "want to avoid possible telemetry",
         "a token or custom route may be configured",
         "TLS-inspecting HTTPS proxy trusted by the client can read a token",
-        "wait until 0.1.13 is published",
+        "choose 0.1.13 or later",
         "public models need no token",
         "full Windows warning",
         "Already used Windows 0.1.12?",
@@ -654,7 +650,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "A custom route can change where the request and token go",
         "want to avoid possible Hugging Face usage telemetry",
         "TLS-inspecting proxy trusted by the client can read the token",
-        "Wait for published 0.1.13",
+        "Choose 0.1.13 or later",
         "public models need no account token",
         "windows.html#model-download-privacy",
         "Already used Windows 0.1.12?",
@@ -668,7 +664,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "custom routing can change where the token goes",
         "avoid this possible usage telemetry",
         "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
-        "wait until Windows 0.1.13 is published",
+        "choose Windows 0.1.13 or later",
         "dictation audio and transcripts are not sent",
         'id="faq-windows-install-privacy"',
     ),
@@ -685,23 +681,16 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     DOCS / "privacy.html": (
         "Windows 0.1.12 package vs. launch",
         "avoid this possible usage telemetry",
-        "wait for 0.1.13 before launching",
+        "choose 0.1.13 or later before launching",
         "Launch Presspeech",
     ),
     DOCS / "install" / "agents.md": (
-        "Before installing or launching published Windows 0.1.12",
-        "Hugging Face usage telemetry",
-        "already-configured or locally saved Hugging Face token",
-        "custom download routing can change where a request",
-        "public models need no account token",
-        "avoid this possible usage telemetry",
-        "concerned that a Hugging Face token or custom download route may be configured",
-        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
-        "wait until Windows 0.1.13 is published",
-        "Do not inspect or display token values",
-        "launch 0.1.12 without the user's informed choice",
-        "Dictation audio and transcripts are not sent in model downloads",
-        "privacy.html#network-calls",
+        "Before installing or launching Windows 0.1.13",
+        "account-token authentication and bundled Hub telemetry are disabled",
+        "configured proxy and CA settings still apply", "TLS-inspecting proxy",
+        "Dictation audio and transcripts are not sent in model requests",
+        "Setup asks before downloading either missing first-run default model",
+        "offers Set Up Later", "Do not inspect or display token values",
     ),
 }
 
@@ -711,7 +700,7 @@ WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
         "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
         "SSL_CERT_FILE", "SSL_CERT_DIR", "trust_env=True",
         "TLS-inspecting HTTPS proxy", "published Windows 0.1.12",
-        "upcoming Windows 0.1.13",
+        "Windows 0.1.13 and later",
     )
     for path in (
         ROOT / "SECURITY.md",
@@ -806,14 +795,14 @@ DELIVERY_BOUNDARY_GUIDANCE = {
 # candidate intentionally does not replace a known-invalid target's previous
 # clipboard item. Generic "already copied" advice could paste unrelated text.
 WINDOWS_DELIVERY_RECOVERY_GUIDANCE = {
-    DOCS / "windows.html": ("Published 0.1.12", "Upcoming 0.1.13", "Delivery Recovery"),
-    DOCS / "faq.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "windows.html": ("Published 0.1.12", "0.1.13 and later", "Delivery Recovery"),
+    DOCS / "faq.html": ("published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
     DOCS / "getting-started.html": ("Windows 0.1.12", "Transcript copied, not pasted", "only if it still holds the complete transcript"),
-    DOCS / "privacy.html": ("Published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
-    DOCS / "llms.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
-    DOCS / "llms-full.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "privacy.html": ("Published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
+    DOCS / "llms.txt": ("published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
+    DOCS / "llms-full.txt": ("published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
     DOCS / "app-compatibility.html": (
-        "published Windows 0.1.12", "upcoming Windows 0.1.13",
+        "published Windows 0.1.12", "Windows 0.1.13 and later",
         "Delivery Recovery", "do <em>not</em> treat the current clipboard as the transcript",
     ),
     ROOT / ".github" / "ISSUE_TEMPLATE" / "compatibility_report.yml": (
@@ -898,17 +887,12 @@ MAC_MODEL_DOWNLOAD_GUIDANCE = {
 # command before deciding whether to make its model request.
 FIRST_RUN_ACTION_COPY = {
     ROOT / "windows" / "README.md": (
-        "Published 0.1.12 starts a missing selected-model download automatically",
-        "Only upcoming 0.1.13 asks you to confirm",
-        "Start with Windows is on for a new profile.",
-        "Choose **Press to toggle** in Settings",
-        "**Finish Setup**, **Set Up Later**, or closing Setup",
+        "Windows 0.1.13 asks before downloading missing first-run model files",
+        "Check Microphone", "off for a new profile", "Press to toggle",
     ),
     DOCS / "getting-started.html": (
-        "In 0.1.12, <strong>Set Up Later</strong> does not stop a missing-model download",
-        "0.1.12 selects <strong>Start Presspeech with Windows</strong> by default",
-        "Its Setup has no dictation-style selector",
-        "<strong>Set Up Later</strong>, or closing Setup if you do not want the app at sign-in",
+        "Choose the offered download or Set Up Later", "Check Microphone",
+        "Start Presspeech with Windows", "off for a new profile", "Press to toggle",
     ),
     DOCS / "install.html": (
         "If you decide to launch the installed version after reviewing",
@@ -916,42 +900,24 @@ FIRST_RUN_ACTION_COPY = {
         "If you chose to wait after reading the <a href=\"#model-download-privacy\">privacy warning</a>, leave it unopened",
     ),
     DOCS / "windows.html": (
-        "Published 0.1.12 starts the selected download on first launch; it has no pre-download deferral. Only upcoming 0.1.13",
-        "<strong>Decide whether to launch 0.1.12</strong>",
-        "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app",
-        "a missing model starts downloading without another prompt",
-        "<h2>First launch of published Windows 0.1.12</h2>",
-        "Set Up Later does not defer that request",
-        "0.1.12 does not offer this choice in Setup",
-        "finish Setup, open <strong>Settings</strong>",
-        "What changes in Windows 0.1.13 (not yet published)",
-        "not available in the current 0.1.12 download",
+        "<h2>First launch of Windows 0.1.13</h2>",
+        "<strong>Set Up Later</strong> defers that request",
+        "Changing the selected input does not start capture",
         "A new profile starts with <strong>Start Presspeech with Windows</strong> off",
-        "<strong>Set Up Later</strong>, or closing Setup if you do not want Presspeech at sign-in",
+        "<strong>Hold to talk</strong> or <strong>Press to toggle</strong> in Setup",
+        "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app",
     ),
     DOCS / "llms-full.txt": (
         "Only after the user decides to launch that version:",
-        "Published Windows 0.1.12 starts a missing selected-model download on first launch without asking first",
-        "Upcoming 0.1.13 checks the default-model cache locally and asks before downloading missing first-run files",
+        "Windows 0.1.13 and later check the default-model cache locally and asks before downloading missing first-run files",
     ),
 }
 FIRST_RUN_ACTION_FORBIDDEN = {
-    ROOT / "README.md": (
-        re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),
-    ),
-    DOCS / "install.html": (
-        re.compile(r"<pre><code>brew install --cask rcourtman/presspeech/presspeech\s+open /Applications/Presspeech\.app"),
-    ),
+    ROOT / "README.md": (re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),),
+    DOCS / "llms-full.txt": (re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),),
     DOCS / "windows.html": (
-        re.compile(r"Choose <strong>Set Up Later</strong> to defer; the Parakeet path also offers the smaller CPU model"),
-        re.compile(
-            r"first-run window shows.{0,220}<strong>Press to toggle</strong> style",
-            re.IGNORECASE | re.DOTALL,
-        ),
-    ),
-    DOCS / "llms-full.txt": (
-        re.compile(r"On first run it checks whether the default model is cached and asks before downloading missing files"),
-        re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),
+        re.compile(r"Windows 0\.1\.13 starts the selected download on first launch without asking"),
+        re.compile(r"A new 0\.1\.13 profile selects startup by default"),
     ),
 }
 
@@ -961,8 +927,8 @@ FIRST_RUN_ACTION_FORBIDDEN = {
 # when release metadata advances so the old steps cannot be published beneath
 # a new version heading.
 ONBOARDING_RELEASE_COPY_REVIEWED: dict[str, str | tuple[str, ...]] = {
-    "version": ("0.3.8", "0.3.9", "0.3.10"),
-    "windows_version": "0.1.12",
+    "version": ("0.3.8", "0.3.9", "0.3.10", "0.3.11"),
+    "windows_version": "0.1.13",
 }
 
 COMPATIBILITY_OVERALL_RESULTS = (
@@ -1420,7 +1386,7 @@ def sync_readme_mac_prompt(text: str, path: Path) -> str:
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
-Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. The bundled HTTP client also honors configured HTTPS proxies; a TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. Upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings. If the user cannot confirm that a TLS-inspection proxy is trusted, don't launch while it is in use. These public models need no account token. Offer to wait until Windows 0.1.13 is published if the user prefers to avoid this possible usage telemetry, is concerned that a Hugging Face token or custom download route may be configured on this PC, or is unsure. Downloading the installer and checksum from GitHub does not make a model request; 0.1.12 starts its selected model download when Presspeech launches. If the user chooses to wait but still wants to install, tell them to uncheck the installer's final "Launch Presspeech" option; do not start the app. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching Windows 0.1.13, explain that model downloads use the network: account-token authentication and bundled Hub telemetry are disabled, while configured proxy and CA settings still apply. Review the trust of a TLS-inspecting proxy before any download. Dictation audio and transcripts are not sent in model requests. Setup asks before downloading either missing first-run default model and offers Set Up Later; a complete cached model can load without another request. The final installer Launch Presspeech option starts checked. Clear it if the user wants to wait. Do not inspect or display token values or change credential settings. For an existing 0.1.12 installation, review its historical token-safety guidance before another download. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
   https://rcourtman.github.io/presspeech/windows.html#download-verify-run
@@ -1433,7 +1399,7 @@ Run these read-only checks in PowerShell:
 
 Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
 
-Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Published Windows 0.1.12 starts the selected model download on first launch; Setup cannot defer it. Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
+Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Windows 0.1.13 asks before downloading either missing first-run default model; Set Up Later defers it. Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
   $ErrorActionPreference = 'Stop'
@@ -1442,6 +1408,9 @@ Download the installer and its checksum from the same official release, then ver
   $version = [string]$metadata.windows_version
   if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
     throw 'The published Windows version is not valid. Do not download anything.'
+  }
+  if ([version]$version -lt [version]'0.1.13') {
+    throw 'This guide requires published Windows 0.1.13 or later. Wait for the updated verified download.'
   }
   $base = "https://github.com/rcourtman/presspeech/releases/download/windows-v$version"
   $folder = Join-Path ([IO.Path]::GetTempPath()) "Presspeech-$version"
@@ -1473,18 +1442,19 @@ If GitHub CLI is already installed and the user is already signed in, offer an o
   }
 This checks the immutable release and the installer's signed GitHub release attestation. It is stronger provenance evidence than the checksum served beside the installer, but it does not code-sign the installer or prove the program is safe. If the user agrees to the check and either command fails, stop; do not run the installer. If the user declines or gh is unavailable, say clearly that provenance was not verified; do not claim otherwise. Let the user decide whether the repository source and matching checksum are enough, and never launch without explicit confirmation.
 
-Before opening the installer, warn that its final "Launch Presspeech" checkbox starts checked. If the user wants to wait, they must clear it before choosing Finish; otherwise Finish launches the app and can start the model request. Consent to install is not consent to launch.
+Before opening the installer, warn that its final "Launch Presspeech" checkbox starts checked. If the user wants to wait, they must clear it before choosing Finish; otherwise Finish launches the app. In 0.1.13, Setup still asks before the first missing-model download. Consent to install is not consent to launch.
 
 Once the checksum succeeds and any requested attestation check also succeeds—or the user explicitly chooses checksum-only trust—show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
   Start-Process -FilePath $installer
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). In published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically during Setup and when its selection changes; its retry button is Check Again, not Check Microphone. Before choosing Finish Setup, Set Up Later, or closing Setup, explain that a new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off. Published 0.1.12 offers Press to toggle in Settings, not Setup. If the user chooses Set Up Later, leave setup incomplete; in 0.1.12 this does not defer an already-started model download. Otherwise, finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Focus on setup and the first test; do not ask the user to star, review, or otherwise endorse the project.
+After the user completes the installer, launch Presspeech from the Start Menu only after explicit confirmation. If the user chose to wait, leave the app unopened and clear the final Launch Presspeech checkbox. Downloading the installer and checksum from GitHub does not make a model request; uncheck the installer's final "Launch Presspeech" option when waiting, and make sure the installer's final "Launch Presspeech" option was unchecked. In Windows 0.1.13, review the selected model and download size in Setup, then choose the offered download or Set Up Later. A complete cached model loads without a network request. Check Microphone explicitly opens the selected input for a short local level test; changing the selection alone does not start capture. Samples are discarded, not saved or sent. Before choosing Finish Setup, Set Up Later, or closing Setup, review startup: Start Presspeech with Windows is off for a new profile; retain existing saved choices and ask before enabling it. Hold to talk and Press to toggle are both in Setup. If the user chooses Set Up Later, leave setup incomplete. Finish Setup requires a ready model and global listener; microphone readiness is advisory. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first in-app test with harmless words, explain that its scratchpad can use the system clipboard, and check the complete result before trying another app. Do not ask for a star, review, or endorsement.
 
-A successful Try Dictation scratchpad test proves only the in-app path, not automatic paste into another app. Do not use a production field, live chat, form that can submit, or command shell as a first target. If the user asks to try another app, follow https://rcourtman.github.io/presspeech/getting-started.html#first-app with harmless words in a blank, disposable field. Count an automatic-paste pass only when the complete text appears once with no recovery notice. For Windows 0.1.12, a copied notice is manual recovery, not a paste pass: inspect the intended field first, then verify the clipboard still holds the complete transcript before manual paste; a later copy may have replaced it. Do not retry blindly. Use https://rcourtman.github.io/presspeech/app-compatibility.html before relying on repeated delivery to a specific app.
+A successful Try Dictation scratchpad test proves only the in-app path, not automatic paste into another app. Do not use a production field, live chat, form that can submit, or command shell as a first target. If the user asks to try another app, follow https://rcourtman.github.io/presspeech/getting-started.html#first-app with harmless words in a blank, disposable field. Count an automatic-paste pass only when the complete text appears once with no recovery notice. For Windows 0.1.13, a copied notice is manual recovery, not a paste pass: inspect the intended field first, then verify the clipboard still holds the complete transcript before manual paste; a later copy may have replaced it. Do not retry blindly. Use https://rcourtman.github.io/presspeech/app-compatibility.html before relying on repeated delivery to a specific app.
 
-Only if the user asks about a future build: planned 0.1.13 asks before downloading either missing first-run default model and offers Set Up Later to defer; the Parakeet path also offers the smaller CPU model. It leaves the microphone closed until the user chooses Check Microphone and defaults Start with Windows off. Upcoming 0.1.13 offers Press to toggle in Setup. None of those controls is in the published 0.1.12 download. Verify GitHub Releases before describing them as available."""
+Native qualification limits: Windows remains a prerelease. Physical microphone/input, GPU, target-app and hardware power-loss testing remain deferred; hosted checks do not establish those paths.
+"""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
@@ -2324,7 +2294,7 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:<strong>macOS:</strong> )?Microphone, Accessibility(?: \(shown as Device Control and Data Access on macOS 27 and later\))?, and Input Monitoring\..*?</p>",
-        "<p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. Accessibility can control the Mac; Input Monitoring can expose typed keys across apps. Presspeech uses these grants for destination checks, paste, and hotkey detection, but the system grants are broader than those uses. Review the <a href=\"install.html#permissions\">permission scope and Apple's guidance</a> before granting them. <strong>Windows:</strong> Turn on Microphone access, Let apps access your microphone, and Let desktop apps access your microphone. Standard Windows builds use these shared controls for desktop apps; <a href=\"https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26340-9233\">some Insider Experimental builds add per-app controls and first-access prompts</a>. If prompted, identify the requesting app before allowing it; an Unsigned label alone is not proof of Presspeech. Published 0.1.12 checks the microphone automatically during Setup, while upcoming 0.1.13 checks it only when you choose Check Microphone.</p>",
+        "<p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. Accessibility can control the Mac; Input Monitoring can expose typed keys across apps. Presspeech uses these grants for destination checks, paste, and hotkey detection, but the system grants are broader than those uses. Review the <a href=\"install.html#permissions\">permission scope and Apple's guidance</a> before granting them. <strong>Windows:</strong> Turn on Microphone access, Let apps access your microphone, and Let desktop apps access your microphone. Standard Windows builds use these shared controls for desktop apps; <a href=\"https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26340-9233\">some Insider Experimental builds add per-app controls and first-access prompts</a>. If prompted, identify the requesting app before allowing it; an Unsigned label alone is not proof of Presspeech. Published 0.1.12 checks the microphone automatically during Setup, while 0.1.13 and later checks it only when you choose Check Microphone.</p>",
         path=path,
     )
     diagnostics_card = """            <article class="card">
@@ -2352,7 +2322,7 @@ LLMS_SHORT_ANSWER = (
     "Presspeech is local push-to-talk dictation for Apple Silicon Macs and x64 Windows PCs. "
     "It transcribes on-device and pastes only when it can verify the original destination. "
     "If delivery is uncertain, macOS and published Windows 0.1.12 copy the transcript "
-    "for manual paste; upcoming Windows 0.1.13 instead requires an explicit Delivery "
+    "for manual paste; Windows 0.1.13 and later instead requires an explicit Delivery "
     "Recovery Copy or Discard and may leave the previous clipboard item unchanged. "
     "No account or cloud transcription is required. Before opening a published build "
     "with a missing model, read its launch decision: macOS 0.3.8 may include an "
@@ -2361,7 +2331,7 @@ LLMS_SHORT_ANSWER = (
     "usage telemetry and an available token; custom routing can change the request "
     "destination. If you want to avoid possible telemetry, cannot rule out a token "
     "or custom route, or are unsure, wait for Windows 0.1.13. macOS 0.3.9 is "
-    "available; Windows 0.1.13 is not yet published. A TLS-inspecting HTTPS proxy trusted by the client can read "
+    "available; verify Windows 0.1.13 download availability in GitHub Releases. A TLS-inspecting HTTPS proxy trusted by the client can read "
     "any token sent through it; do not launch through one whose trust is unclear. "
     "On macOS 0.3.8, a malformed inherited proxy URL can be logged with embedded "
     "credentials and ignored, allowing a model request without the expected proxy; "
@@ -2448,15 +2418,15 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use. "
         "During Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
         "Hugging Face. If you prefer to avoid this possible usage telemetry, are concerned that a token "
-        "or custom route may be configured, or are unsure, wait until Windows 0.1.13 is published. "
+        "or custom route may be configured, or are unsure, choose Windows 0.1.13 or later. "
         "Model-request metadata includes a random per-process session ID, and pinned Hub "
         "1.29.0 may request /api/agent-harnesses and add an agent/<id> label based on inherited "
         "agent-related environment markers. An available "
         "Hugging Face token may accompany a model request. Inherited HF_ENDPOINT and "
         "HUGGINGFACE_CO_STAGING settings can change its destination, and HF_HUB_USER_AGENT_ORIGIN "
         "is included in request metadata if set; the token may accompany a request to that configured "
-        "endpoint. These public models do not need an account token. Upcoming Windows 0.1.13 fixes "
-        "these inherited settings but is not yet published. Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file before model loading: it checks each against its pinned SHA-256 manifest. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. A proxy can still observe request metadata or block a download. Dictation audio "
+        "endpoint. These public models do not need an account token. Windows 0.1.13 and later fixes "
+        "these inherited settings and verify its availability in GitHub Releases. Both published Windows 0.1.12 and Windows 0.1.13 and later use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Windows 0.1.13 and later verifies every allowed required and present optional inference file before model loading: it checks each against its pinned SHA-256 manifest. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. A proxy can still observe request metadata or block a download. Dictation audio "
         "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
         "itemised (see the privacy inventory)."
     )
@@ -2492,14 +2462,14 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         text = replace_literal(
             text,
             old_windows_privacy_with_token,
-            old_windows_privacy + " It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token may accompany a request to that configured endpoint; these models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
+            old_windows_privacy + " It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token may accompany a request to that configured endpoint; these models do not require an account token. Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases.",
             path=path,
         )
     if old_windows_privacy in text and "HF_ENDPOINT" not in text:
         text = replace_literal(
             text,
             old_windows_privacy,
-            old_windows_privacy + " The 0.1.12 loader also honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change the request destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a request to that configured endpoint; these models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
+            old_windows_privacy + " The 0.1.12 loader also honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change the request destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a request to that configured endpoint; these models do not require an account token. Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases.",
             path=path,
         )
     windows_page = "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
@@ -2573,32 +2543,32 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     if "agent-harnesses" not in privacy_paragraph:
         text = text.replace(
             privacy_marker,
-            privacy_marker + "The pinned Hub 1.29.0 client may request /api/agent-harnesses when its local registry cache is missing or stale and may add an agent/<id> label to model-request metadata based on inherited agent-related environment markers. Upcoming Windows 0.1.13 disables Hub telemetry before imports and checks that rendered headers contain no agent label; these controls are not in published 0.1.12. ",
+            privacy_marker + "The pinned Hub 1.29.0 client may request /api/agent-harnesses when its local registry cache is missing or stale and may add an agent/<id> label to model-request metadata based on inherited agent-related environment markers. Windows 0.1.13 and later disables Hub telemetry before imports and checks that rendered headers contain no agent label; these controls are not in published 0.1.12. ",
             1,
         )
     privacy_paragraph = text.partition("## Privacy")[2].lstrip().partition("\n\n")[0]
     if "HTTP_PROXY" not in privacy_paragraph:
         proxy_summary = (
-            " Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents."
+            " Both published Windows 0.1.12 and Windows 0.1.13 and later use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents."
         )
-        marker = "Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published."
+        marker = "Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases."
         if marker in privacy_paragraph:
             text = text.replace(marker, marker + proxy_summary, 1)
     privacy_paragraph = text.partition("## Privacy")[2].lstrip().partition("\n\n")[0]
     legacy_integrity_summary = (
-        "Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file "
+        "Windows 0.1.13 and later verifies every allowed required and present optional inference file "
         "against its pinned SHA-256 manifest before model loading; modified model bytes fail closed, "
         "although a proxy can still observe request metadata or block a download."
     )
     integrity_detail = (
-        "Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file "
+        "Windows 0.1.13 and later verifies every allowed required and present optional inference file "
         "before model loading by checking each against its pinned SHA-256 manifest. On Windows, "
         "Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only "
         "verification record; mismatches fail closed. This may lengthen model preparation. A proxy "
         "can still observe request metadata or block a download."
     )
     stale_integrity_detail = (
-        "Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file "
+        "Windows 0.1.13 and later verifies every allowed required and present optional inference file "
         "before model loading by checking each against its pinned SHA-256 manifest; it reuses a local "
         "verification record only while file identity and metadata remain unchanged. Files without a "
         "matching record are rehashed, and mismatches fail closed, although a proxy can still observe "
@@ -2613,7 +2583,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             " Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. "
             + integrity_detail
         )
-        marker = "Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published."
+        marker = "Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases."
         if marker in privacy_paragraph:
             text = text.replace(marker, marker + integrity_summary, 1)
     calls_marker = "1. Speech model downloads normally"
@@ -2622,7 +2592,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         telemetry_marker = "the exact telemetry fields are not independently itemised."
         calls_text = calls_text.replace(
             telemetry_marker,
-            telemetry_marker + " The pinned Hub 1.29.0 client may request /api/agent-harnesses when its local registry cache is missing or stale and may add an agent/<id> label to model-request User-Agent metadata based on inherited agent-related environment markers. Upcoming Windows 0.1.13 disables Hub telemetry before imports and checks that rendered headers contain no agent label; these controls are not in published 0.1.12.",
+            telemetry_marker + " The pinned Hub 1.29.0 client may request /api/agent-harnesses when its local registry cache is missing or stale and may add an agent/<id> label to model-request User-Agent metadata based on inherited agent-related environment markers. Windows 0.1.13 and later disables Hub telemetry before imports and checks that rendered headers contain no agent label; these controls are not in published 0.1.12.",
             1,
         )
         text = before_calls + marker + calls_text
@@ -2643,7 +2613,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             "If you prefer to avoid this possible usage telemetry, are concerned that a token or custom "
             "route may be configured, or are unsure, wait for Windows 0.1.13 before launching 0.1.12. "
             "Dictation audio and transcripts are not sent in model downloads; exact telemetry "
-            "fields are not independently itemised. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or token in the local Hugging Face cache may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. These models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published. Audio is captured while the hotkey is "
+            "fields are not independently itemised. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or token in the local Hugging Face cache may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. These models do not require an account token. Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases. Audio is captured while the hotkey is "
             "active, transcribed locally, then discarded.",
             path=path,
         )
@@ -2697,14 +2667,14 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         text = replace_literal(
             text,
             old_model_privacy_with_token,
-            old_model_privacy + " It also leaves default implicit authentication enabled, so a token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token may accompany a request to that configured endpoint; these public models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
+            old_model_privacy + " It also leaves default implicit authentication enabled, so a token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token may accompany a request to that configured endpoint; these public models do not require an account token. Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases.",
             path=path,
         )
     if old_model_privacy in text and "HF_ENDPOINT" not in text:
         text = replace_literal(
             text,
             old_model_privacy,
-            old_model_privacy + " The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change the request destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a request to that configured endpoint; these public models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
+            old_model_privacy + " The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change the request destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a request to that configured endpoint; these public models do not require an account token. Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases.",
             path=path,
         )
     diagnostics_sentence = (
@@ -3611,7 +3581,7 @@ def check_anchored_install_preflights(
                 )
         else:
             launch_step = re.search(
-                r"<li>\s*<strong>Decide whether to launch 0\.1\.12</strong>\s*<p>(.*?)</p>",
+                rf"<li>\s*<strong>Decide whether to launch {re.escape(str(version))}</strong>\s*<p>(.*?)</p>",
                 contents[end:],
                 flags=re.S,
             )
@@ -3621,7 +3591,7 @@ def check_anchored_install_preflights(
                     "If you chose to wait",
                     "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked",
                     "do not open the app",
-                    "If you choose to use published 0.1.12 now",
+                    f"If you choose to use {version} now",
                 )
             ):
                 errors.append(
@@ -3634,7 +3604,7 @@ def check_anchored_install_preflights(
 def check_macos_upgrade_preflight(
     metadata: dict[str, object],
     page: Path = DOCS / "install.html",
-    reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9", "0.3.10"),
+    reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9", "0.3.10", "0.3.11"),
 ) -> list[str]:
     """An upgrade can fetch a missing/invalid model, so deep links need a stop choice."""
     display = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page.name
@@ -3869,7 +3839,7 @@ MODEL_DOWNLOAD_SCHEMA_DESCRIPTION = (
 MODEL_DOWNLOAD_FIRST_RUN_GUIDANCE = (
     "macOS 0.3.8 and Windows 0.1.12 start a missing-model download automatically",
     "a clean install of macOS 0.3.9 or later asks you to choose Download Model or Set Up Later to defer",
-    "upcoming Windows 0.1.13 asks before fetching missing files for either first-run default",
+    "Windows 0.1.13 and later asks before fetching missing files for either first-run default",
     "cached models load without a prompt",
     "Existing macOS installs keep automatic startup",
     "The machine-readable inventory lists these controls per release and model",
@@ -3957,8 +3927,21 @@ def check_model_download_first_run_controls(
                 errors.append(
                     f"{inventory_display}: duplicate {status} control for {call_name}"
                 )
-            elif status in ("published", "upcoming"):
+            elif status in ("historical", "published", "upcoming"):
                 by_status[str(status)] = control
+        if set(by_status) == {"historical", "published"}:
+            historical, current = by_status["historical"], by_status["published"]
+            historical_version = historical.get("version", "")
+            if (current.get("version") != expected_current or
+                    not isinstance(historical_version, str) or
+                    not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", historical_version) or
+                    tuple(map(int, historical_version.split('.'))) >= current_parts):
+                errors.append(f"{inventory_display}: {call_name} historical/published versions are not ordered around the current release")
+            historical_controls = expectation["published"] if call_name == "windows_first_launch_model_download" and historical_version == "0.1.12" else expectation["upcoming"]
+            if (historical.get("missing_model_controls") != historical_controls or
+                    current.get("missing_model_controls") != expectation["upcoming"]):
+                errors.append(f"{inventory_display}: {call_name} promoted first-run controls do not match the documented release behavior")
+            continue
         if set(by_status) != {"published", "upcoming"}:
             errors.append(
                 f"{inventory_display}: {call_name} needs one published and one upcoming release"
@@ -4093,8 +4076,8 @@ def check_published_step_scoping(
     """Keep unreleased controls out of the ordered steps for current downloads."""
     errors: list[str] = []
     for path, section_id, future_version in (
-        (mac_path, "direct-download", "0.3.11"),
-        (windows_path, "first-launch", "0.1.13"),
+        (mac_path, "direct-download", "0.3.12"),
+        (windows_path, "first-launch", "0.1.14"),
     ):
         display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
         try:
@@ -4291,7 +4274,7 @@ def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str
         "choose macOS 0.3.9 after reviewing its launch decision",
         'href="install.html#model-download-privacy"',
         "Windows 0.1.12 — telemetry or token",
-        "wait until Windows 0.1.13 is published",
+        "choose Windows 0.1.13 or later",
         'href="windows.html#model-download-privacy"',
         'href="privacy.html#network-calls"',
     )
@@ -4351,18 +4334,18 @@ def check_getting_started_preflight_order(
         "A model request can include the inherited token",
         "lowercase <code>https_proxy</code>",
         "TLS-inspecting proxy trusted by macOS can read that token",
-        "Wait for published 0.1.13",
+        "Choose 0.1.13 or later",
         "want to avoid possible Hugging Face usage telemetry",
         "an available token or custom download route may be configured",
         "A custom route can change where the request and token go",
         "TLS-inspecting proxy trusted by the client can read the token",
         "If such a proxy's trust is unclear, do not launch while it is in use",
-        "upcoming build disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings",
+        "Windows 0.1.13 disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings",
         "leave <strong>Launch Presspeech</strong> unchecked",
         "public models need no account token",
         "model requests do not include dictation audio or transcripts",
         "Do not inspect or share token values",
-        "not published yet",
+        "Verify published download availability",
         'href="https://github.com/rcourtman/presspeech/releases"',
         'href="install.html#model-download-privacy"',
         'href="windows.html#model-download-privacy"',
@@ -4539,7 +4522,7 @@ def check_model_recovery_privacy_order(
                     "Before reopening, retrying, or selecting an uncached model in Windows 0.1.12",
                     "usage telemetry", "already-configured or saved token",
                     "custom routing can change its destination", "TLS-inspecting HTTPS proxy",
-                    "do not start another download", "Windows 0.1.13 is published and installed",
+                    "do not start another download", "Windows 0.1.13 or later is installed",
                     "windows.html#model-download-privacy",
                     "If you choose to make another model request after reading the warning above",
                 )),
@@ -4564,7 +4547,7 @@ def check_model_recovery_privacy_order(
                     "Before reopening, retrying, or selecting an uncached model in Windows 0.1.12",
                     "usage telemetry", "already-configured or saved token",
                     "custom routing can change its destination", "TLS-inspecting HTTPS proxy",
-                    "do not start another download", "Windows 0.1.13 is published and installed",
+                    "do not start another download", "Windows 0.1.13 or later is installed",
                     "windows.html#model-download-privacy",
                     "If you choose to make another model request after reading the warning above",
                 )),
@@ -4669,7 +4652,7 @@ def check_windows_agent_install_privacy_order(
         return [f"{display}: missing Windows assistant install prompt"]
     section_end = contents.find("\n## ", section_start + len("## Windows"))
     section = contents[section_start:] if section_end < 0 else contents[section_start:section_end]
-    warning = section.find("Before installing or launching published Windows 0.1.12")
+    warning = section.find("Before installing or launching Windows 0.1.13")
     actions = (
         "Use only the published Windows prerelease",
         "Download the installer and its checksum",
@@ -4707,7 +4690,7 @@ def check_agent_brief_preflight_order(
             (
                 ("Before installing or launching macOS 0.3.8",
                  "brew install --cask"),
-                ("Before installing or launching published Windows 0.1.12",
+                ("Before installing or launching Windows 0.1.13",
                  "The current Windows installer, requirements"),
             ),
         ),
@@ -5200,6 +5183,18 @@ def check_repository_install_guidance(
 
 def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
     expected: dict[Path, str] = {}
+    inventory_path = DOCS / "privacy" / "network-calls.json"
+    inventory = json.loads(read_text(inventory_path))
+    for call in inventory["network_calls"]:
+        expectation = MODEL_DOWNLOAD_FIRST_RUN_CONTROL_EXPECTATIONS.get(call.get("name"))
+        if not expectation:
+            continue
+        controls = call["first_run_controls_by_release"]
+        current = str(metadata[expectation["version_key"]])
+        if any(item.get("version") == current and item.get("status") == "upcoming" for item in controls):
+            for item in controls:
+                item["status"] = "published" if item["version"] == current else "historical"
+    expected[inventory_path] = json.dumps(inventory, indent=2, ensure_ascii=False) + "\n"
     for path, syncer in SYNCERS.items():
         if path == DOCS / "sitemap.xml":
             continue
@@ -5404,6 +5399,18 @@ def check_windows_release_references(
         if not path.exists():
             continue
         text = read_text(path)
+        def historical_release_note(match: re.Match[str]) -> str:
+            attrs, label = match.group(1), match.group(2)
+            marker = re.search(r'\bdata-historical-release="windows-v(\d+\.\d+\.\d+)"', attrs)
+            href = re.search(r'\bhref="([^"]+)"', attrs)
+            if marker and href:
+                version = marker.group(1)
+                if (href.group(1) == f"https://github.com/rcourtman/presspeech/releases/tag/windows-v{version}"
+                        and version in html.unescape(re.sub(r"<[^>]+>", " ", label))
+                        and tuple(map(int, version.split('.'))) < tuple(map(int, expected.split('.')))):
+                    return ""
+            return match.group(0)
+        text = re.sub(r'<a\b([^>]+)>(.*?)</a>', historical_release_note, text, flags=re.S)
         stale = {
             (label, match.group("version"))
             for pattern, label in WINDOWS_RELEASE_REFERENCE_PATTERNS
@@ -5651,13 +5658,13 @@ def check_assistant_first_test_handoff(
             "Windows",
             windows_prompt,
             "Use Try Dictation for the first in-app test",
-            "For Windows 0.1.12",
+            "For Windows 0.1.13",
         ),
     )
     errors: list[str] = []
     for platform, prompt, setup_marker, published_marker in checks:
         start = prompt.find(setup_marker)
-        end = prompt.find("Only if the user asks about a future build")
+        end = prompt.find("Native qualification limits:") if platform == "Windows" else prompt.find("Only if the user asks about a future build")
         if start < 0 or end <= start:
             errors.append(f"{platform} assistant prompt: missing first-test boundary")
             continue
@@ -5716,9 +5723,9 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
 
     required_windows_setup_choice = (
         "Before choosing Finish Setup, Set Up Later, or closing Setup",
-        "new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off",
-        "Published 0.1.12 offers Press to toggle in Settings, not Setup",
-        "Upcoming 0.1.13 offers Press to toggle in Setup",
+        "Start Presspeech with Windows is off for a new profile",
+        "Hold to talk and Press to toggle are both in Setup",
+        "Check Microphone explicitly opens the selected input",
         "If the user chooses Set Up Later, leave setup incomplete",
     )
     missing_windows_setup_choice = [
@@ -5732,9 +5739,9 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
         )
 
     required_windows_proxy_notice = (
-        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
-        "still honors proxy and CA settings",
-        "cannot confirm that a TLS-inspection proxy is trusted",
+        "configured proxy and CA settings still apply",
+        "Review the trust of a TLS-inspecting proxy",
+        "account-token authentication and bundled Hub telemetry are disabled",
     )
     missing_windows_proxy_notice = [
         phrase for phrase in required_windows_proxy_notice
@@ -6141,7 +6148,7 @@ def run_self_test() -> None:
         ):
             raise SyncError("self-test: generic recovery notice copy promise was accepted")
 
-        preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.12"}
+        preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.13"}
         preflight_surfaces = []
         for surface in ANCHORED_INSTALL_PREFLIGHTS:
             fixture = dict(surface)
@@ -6169,10 +6176,10 @@ def run_self_test() -> None:
                 download = '<a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe">Download</a>'
                 action = ""
                 suffix = (
-                    "<li><strong>Decide whether to launch 0.1.12</strong><p>"
+                    "<li><strong>Decide whether to launch 0.1.13</strong><p>"
                     "If you chose to wait after reading the privacy decision, "
                     "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked "
-                    "and do not open the app. If you choose to use published 0.1.12 now, "
+                    "and do not open the app. If you choose to use 0.1.13 now, "
                     "open it from the Start Menu.</p></li>"
                 )
             Path(fixture["path"]).write_text(
@@ -6183,7 +6190,7 @@ def run_self_test() -> None:
         preflight_surfaces = tuple(preflight_surfaces)
         if check_anchored_install_preflights(preflight_metadata, preflight_surfaces):
             raise SyncError("self-test: valid anchored install preflights were rejected")
-        stale_preflight_metadata = dict(preflight_metadata, version="0.3.11")
+        stale_preflight_metadata = dict(preflight_metadata, version="0.3.12")
         if not any(
             "review the macos anchored install preflight" in error
             for error in check_anchored_install_preflights(
@@ -6360,6 +6367,23 @@ def run_self_test() -> None:
             metadata, inventory_path, privacy_page_path
         ):
             raise SyncError("self-test: valid per-release model controls were rejected")
+
+        legacy_inventory = inventory_path.read_text(encoding="utf-8")
+        promoted_calls = json.loads(legacy_inventory)
+        promoted_metadata = dict(metadata, version="0.3.11", windows_version="0.1.13")
+        for call in promoted_calls["network_calls"]:
+            old, current = call["first_run_controls_by_release"]
+            is_windows = call["name"] == "windows_first_launch_model_download"
+            old.update(version="0.1.12" if is_windows else "0.3.10", status="historical")
+            current.update(version="0.1.13" if is_windows else "0.3.11", status="published")
+        inventory_path.write_text(json.dumps(promoted_calls), encoding="utf-8")
+        if check_model_download_first_run_controls(promoted_metadata, inventory_path, privacy_page_path):
+            raise SyncError("self-test: promoted release controls with explicit legacy history were rejected")
+        promoted_calls["network_calls"][1]["first_run_controls_by_release"][1]["missing_model_controls"][0]["can_defer"] = False
+        inventory_path.write_text(json.dumps(promoted_calls), encoding="utf-8")
+        if not check_model_download_first_run_controls(promoted_metadata, inventory_path, privacy_page_path):
+            raise SyncError("self-test: promoted release accepted contradictory download consent")
+        inventory_path.write_text(legacy_inventory, encoding="utf-8")
 
         incorrect_controls = json.loads(inventory_path.read_text(encoding="utf-8"))
         incorrect_controls["network_calls"][0]["first_run_controls_by_release"][1][
@@ -7165,6 +7189,24 @@ def run_self_test() -> None:
         if check_windows_release_references(metadata, [release_reference]):
             raise SyncError("self-test: current Windows release references were rejected")
 
+        historical = ('<a data-historical-release="windows-v0.1.12" '
+                      'href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12">'
+                      'Legacy Windows 0.1.12 release notes</a>')
+        release_reference.write_text(historical, encoding="utf-8")
+        if check_windows_release_references(metadata, [release_reference]):
+            raise SyncError("self-test: explicitly labelled historical release notes were rejected")
+        for invalid in (
+            historical.replace('data-historical-release="windows-v0.1.12" ', ''),
+            historical.replace('data-historical-release="windows-v0.1.12"',
+                               'data-historical-release="windows-v0.1.11"'),
+            historical.replace('Legacy Windows 0.1.12 release notes', 'Download installer'),
+            historical.replace('/tag/windows-v0.1.12',
+                               '/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe'),
+        ):
+            release_reference.write_text(invalid, encoding="utf-8")
+            if not check_windows_release_references(metadata, [release_reference]):
+                raise SyncError("self-test: stale download or unverified historical tag was accepted")
+
         orientation = Path(tmp) / "preview.svg"
         orientation.write_text("Mac and Windows; macOS release\n", encoding="utf-8")
         if not check_platform_orientation(
@@ -7311,7 +7353,7 @@ def run_self_test() -> None:
                 "HF_HUB_USER_AGENT_ORIGIN",
                 "configured endpoint",
                 "do not require an account token",
-                "Upcoming Windows 0.1.13",
+                "Windows 0.1.13 and later",
                 "implicit authentication",
                 "Already used Windows 0.1.12?",
                 "inherited",
@@ -7332,7 +7374,7 @@ def run_self_test() -> None:
             "Published Windows 0.1.12 may use HF_TOKEN or the local Hugging Face cache. "
             "It honors HF_ENDPOINT and HUGGINGFACE_CO_STAGING and may add "
             "HF_HUB_USER_AGENT_ORIGIN; a token may accompany a request to the configured endpoint. "
-            "Those public models do not require an account token. Upcoming Windows 0.1.13 "
+            "Those public models do not require an account token. Windows 0.1.13 and later "
             "clears these settings and disables implicit authentication. Already used Windows "
             "0.1.12? If a model download ran with a token available and an inherited HF_ENDPOINT "
             "or staging setting may have sent it to a destination you do not trust, treat the token "
@@ -7346,14 +7388,14 @@ def run_self_test() -> None:
         scope_guidance = Path(tmp) / "windows-download-privacy-scopes.md"
         scope_guidance.write_text(
             "Published Windows 0.1.12 leaves implicit authentication enabled. "
-            "Upcoming Windows 0.1.13 candidate disables implicit authentication.\n",
+            "Windows 0.1.13 and later candidate disables implicit authentication.\n",
             encoding="utf-8",
         )
         if check_windows_model_download_privacy_scopes((scope_guidance,)):
             raise SyncError("self-test: correctly scoped Windows privacy claims were rejected")
         scope_guidance.write_text(
             "Published Windows 0.1.12 leaves implicit authentication enabled. "
-            "Upcoming Windows 0.1.13 disables Hub telemetry. It also leaves implicit "
+            "Windows 0.1.13 and later disables Hub telemetry. It also leaves implicit "
             "authentication enabled. The 0.1.13 candidate disables implicit "
             "authentication.\n",
             encoding="utf-8",
@@ -7381,7 +7423,7 @@ def run_self_test() -> None:
                 "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
                 "SSL_CERT_FILE", "SSL_CERT_DIR", "trust_env=True",
                 "TLS-inspecting HTTPS proxy", "published Windows 0.1.12",
-                "upcoming Windows 0.1.13",
+                "Windows 0.1.13 and later",
             )
         }
         proxy_guidance.write_text(
@@ -7393,7 +7435,7 @@ def run_self_test() -> None:
             "The published Windows 0.1.12 client uses trust_env=True and honors "
             "HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and "
             "SSL_CERT_DIR. A TLS-inspecting HTTPS proxy whose CA is trusted can "
-            "see its token. Upcoming Windows 0.1.13 removes that token but still "
+            "see its token. Windows 0.1.13 and later removes that token but still "
             "honors proxy and CA settings.",
             encoding="utf-8",
         )
@@ -7409,7 +7451,7 @@ def run_self_test() -> None:
                 "Custom download routing can change where the model request",
                 "avoid this possible usage telemetry",
                 "if a Hugging Face token or custom download route is configured on this PC",
-                "wait until Windows 0.1.13 is published",
+                "choose Windows 0.1.13 or later",
                 "public models need no account token",
                 "Windows privacy decision and technical details",
                 "Already used Windows 0.1.12?",
@@ -7431,7 +7473,7 @@ def run_self_test() -> None:
             "Before installing or launching Windows 0.1.12, usage telemetry and an already-configured "
             "or locally saved Hugging Face token may be sent; custom download routing "
             "can change where the model request goes. If you prefer to avoid this possible usage telemetry, "
-            "or if a Hugging Face token or custom download route is configured on this PC, wait until Windows 0.1.13 is published. "
+            "or if a Hugging Face token or custom download route is configured on this PC, choose Windows 0.1.13 or later. "
             "The public models need no account token; see the Windows privacy decision "
             "and technical details. Already used Windows 0.1.12? If a model download ran with "
             "a token available and an inherited HF_ENDPOINT or staging setting may have sent it to "
@@ -7445,7 +7487,7 @@ def run_self_test() -> None:
         summary_guidance.write_text(
             "Before installing or launching Windows 0.1.12, usage telemetry and an already-configured "
             "or locally saved Hugging Face token may be sent; custom download routing can change where "
-            "the model request goes. If a token is configured, wait until Windows 0.1.13 is published. "
+            "the model request goes. If a token is configured, choose Windows 0.1.13 or later. "
             "The public models need no account token. Windows privacy decision and technical details. "
             "Already used Windows 0.1.12? If a model download ran with a token available and an inherited "
             "HF_ENDPOINT or staging setting may have sent it to a destination you do not trust, treat the "
@@ -7462,7 +7504,7 @@ def run_self_test() -> None:
         }
         good_integrity_copy = (
             "Published Windows 0.1.12 does not independently verify model files against SHA-256. "
-            "Upcoming Windows 0.1.13 verifies every allowed inference file. "
+            "Windows 0.1.13 and later verifies every allowed inference file. "
             "On Windows, Presspeech rehashes the reviewed files on every load."
         )
         integrity_copy.write_text(good_integrity_copy, encoding="utf-8")
@@ -7479,7 +7521,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: contradictory Windows integrity claim was accepted")
 
         readme_preflight = Path(tmp) / "readme-preflight.md"
-        published = {"version": "0.3.9", "windows_version": "0.1.12"}
+        published = {"version": "0.3.9", "windows_version": "0.1.13"}
         safe_readme = read_text(ROOT / "README.md")
         readme_preflight.write_text(safe_readme, encoding="utf-8")
         if check_readme_launch_preflight(published, readme_preflight):
@@ -7649,19 +7691,19 @@ def run_self_test() -> None:
             'lowercase <code>https_proxy</code>, and a TLS-inspecting proxy trusted by macOS can read that token. '
             '<a href="install.html#model-download-privacy">full macOS warning</a></li>'
             '<li id="windows-launch-decision"><h3>Windows 0.1.12 — wait if privacy risks are unclear</h3> '
-            '<strong>Wait for published 0.1.13</strong> if you want to avoid possible Hugging Face usage telemetry, '
+            '<strong>Choose 0.1.13 or later</strong> if you want to avoid possible Hugging Face usage telemetry, '
             'an available token or custom download route may be configured. '
             '<strong>Download size and language:</strong> 2.5 GB multilingual or 141 MiB English-only. '
             '<a href="windows.html#language-support">Check language support</a>. A custom route can change where '
             'the request and token go; a TLS-inspecting proxy trusted by the client can read the token. '
             "If such a proxy's trust is unclear, do not launch while it is in use. "
             'If you install but wait, leave <strong>Launch Presspeech</strong> unchecked. '
-            'The upcoming build disables bundled-library telemetry and account-token authentication '
+            'The Windows 0.1.13 disables bundled-library telemetry and account-token authentication '
             'but still honors proxy and CA settings. '
             '<a href="windows.html#model-download-privacy">full Windows warning</a></li></ul>'
             '<p>The public models need no account token, and model requests do not include dictation audio '
             'or transcripts. Do not inspect or share token values. The later builds are '
-            '<strong>not published yet</strong>; check '
+            '<strong>Verify published download availability</strong>; check '
             '<a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a>. '
             'See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p></div>'
             '<div class="actions"><a href="install.html">Install</a>'
@@ -7704,7 +7746,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: onboarding platform shortcut bypassed its warning")
         for warning in (
             "Choose macOS 0.3.9 after reviewing its launch decision",
-            "Wait for published 0.1.13",
+            "Choose 0.1.13 or later",
             "If such a proxy's trust is unclear, do not launch while it is in use",
         ):
             getting_started.write_text(
@@ -7894,7 +7936,7 @@ def run_self_test() -> None:
 
         windows_agent_prompt = Path(tmp) / "agents.md"
         agent_warning = (
-            "Before installing or launching published Windows 0.1.12, disclose "
+            "Before installing or launching Windows 0.1.13, disclose "
             "the model-download privacy behavior."
         )
         agent_actions = (
@@ -7940,7 +7982,7 @@ def run_self_test() -> None:
         short_brief.write_text(short_contents, encoding="utf-8")
         full_brief.write_text(
             full_contents.replace(
-                "Before installing or launching published Windows 0.1.12",
+                "Before installing or launching Windows 0.1.13",
                 "After installing published Windows 0.1.12",
                 1,
             ), encoding="utf-8",
@@ -8047,13 +8089,13 @@ def run_self_test() -> None:
         scoped_recovery = {
             recovery_page: (
                 "Published Windows 0.1.12",
-                "Upcoming Windows 0.1.13",
+                "Windows 0.1.13 and later",
                 "Delivery Recovery",
             ),
         }
         recovery_page.write_text(
             "Published Windows 0.1.12 copies for manual paste. "
-            "Upcoming Windows 0.1.13 uses Delivery Recovery Copy or Discard.\n",
+            "Windows 0.1.13 and later uses Delivery Recovery Copy or Discard.\n",
             encoding="utf-8",
         )
         if check_windows_delivery_recovery_guidance(scoped_recovery):
@@ -8070,7 +8112,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: unsafe Windows clipboard advice was accepted")
         recovery_page.write_text(
             "Published Windows 0.1.12 copies for manual paste. "
-            "Upcoming Windows 0.1.13 uses Delivery Recovery Copy or Discard. "
+            "Windows 0.1.13 and later uses Delivery Recovery Copy or Discard. "
             "Presspeech normally pastes; otherwise it copies the transcript.\n",
             encoding="utf-8",
         )
@@ -8412,11 +8454,11 @@ def run_self_test() -> None:
         action_copy.write_text("Published 0.1.12 starts without asking\n", encoding="utf-8")
         if check_first_run_action_copy(required_action_copy, forbidden_action_copy):
             raise SyncError("self-test: versioned first-run action was rejected")
-        if check_onboarding_release_scope({"version": "0.3.8", "windows_version": "0.1.12"}):
+        if check_onboarding_release_scope({"version": "0.3.8", "windows_version": "0.1.13"}):
             raise SyncError("self-test: reviewed onboarding release scope was rejected")
-        if len(check_onboarding_release_scope({"version": "0.3.11", "windows_version": "0.1.13"})) != 2:
+        if len(check_onboarding_release_scope({"version": "0.3.12", "windows_version": "0.1.14"})) != 2:
             raise SyncError("self-test: onboarding steps were not gated on a new release")
-        action_copy.write_text("Upcoming 0.1.13 asks before downloading\n", encoding="utf-8")
+        action_copy.write_text("Windows 0.1.13 and later asks before downloading\n", encoding="utf-8")
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
             raise SyncError("self-test: missing published first-run action was accepted")
         scoped_mac = Path(tmp) / "install.html"
@@ -8427,13 +8469,13 @@ def run_self_test() -> None:
         )
         scoped_windows.write_text(
             '<section id="first-launch"><ol class="steps"><li>0.1.12</li></ol>'
-            '<details>0.1.13</details></section>',
+            '<details>0.1.14</details></section>',
             encoding="utf-8",
         )
         if check_published_step_scoping(scoped_mac, scoped_windows):
             raise SyncError("self-test: separated future controls were rejected")
         scoped_mac.write_text(
-            '<section id="direct-download"><ol class="steps"><li>0.3.11</li></ol></section>',
+            '<section id="direct-download"><ol class="steps"><li>0.3.12</li></ol></section>',
             encoding="utf-8",
         )
         if not check_published_step_scoping(scoped_mac, scoped_windows):
@@ -8443,7 +8485,7 @@ def run_self_test() -> None:
             encoding="utf-8",
         )
         scoped_windows.write_text(
-            '<section id="first-launch"><ol class="steps"><li>0.1.13</li></ol></section>',
+            '<section id="first-launch"><ol class="steps"><li>0.1.14</li></ol></section>',
             encoding="utf-8",
         )
         if not check_published_step_scoping(scoped_mac, scoped_windows):
@@ -8457,11 +8499,10 @@ def run_self_test() -> None:
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
             raise SyncError("self-test: combined install-and-launch command was accepted")
         action_copy.write_text(
-            "Published 0.1.12 starts without asking. The first-run window shows "
-            "a <strong>Press to toggle</strong> style.\n", encoding="utf-8"
+            "Published 0.1.12 starts without asking. A new 0.1.13 profile selects startup by default.\n", encoding="utf-8"
         )
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
-            raise SyncError("self-test: unreleased Setup trigger was attributed to 0.1.12")
+            raise SyncError("self-test: incorrect current Setup startup default was accepted")
 
         phase_copy.write_text(
             "Upcoming Windows **9.8.7** adds this behavior.\n",

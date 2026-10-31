@@ -3,8 +3,7 @@
 Fast, private, local push-to-talk dictation for Windows — a Windows port of
 [presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
 speak, and release. Presspeech normally pastes into the original window when
-it can verify that destination; otherwise published 0.1.12 leaves the transcript
-on the clipboard for manual paste. A move to another field or browser tab in
+it can verify that destination; otherwise Windows 0.1.13 retains it in Delivery Recovery for explicit Copy or Discard. A move to another field or browser tab in
 the same window may go undetected, so keep the starting field and tab selected
 until insertion or recovery. Speech recognition runs on your machine; Presspeech
 has no account or cloud transcription service.
@@ -24,18 +23,18 @@ a model request. It honors inherited `HF_ENDPOINT` and
 `HUGGINGFACE_CO_STAGING` settings, so requests can go to a configured endpoint
 instead of the public Hub; an available token may accompany the request there.
 If `HF_HUB_USER_AGENT_ORIGIN` is set, its value is also added to request
-metadata. These public models do not require an account token. Upcoming 0.1.13
+metadata. These public models do not require an account token. 0.1.13 and later
 disables Hub telemetry before import, pins the public endpoint, clears the
 staging/origin settings, disables implicit
 authentication, and explicitly sends no account token; see the
 [version-scoped
 network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 If you prefer to avoid this possible usage telemetry, are concerned that a
-token or custom route may be configured, or are unsure, wait for 0.1.13 before
+token or custom route may be configured, or are unsure, choose 0.1.13 or later before
 launching 0.1.12. Installing the package alone does not start
 the model request; keep the app unopened if you choose to wait.
 
-Both published Windows 0.1.12 and upcoming Windows 0.1.13 use pinned `huggingface-hub` 1.29.0 and HTTPX 0.28.1 with the default `trust_env=True`: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` affect proxy routing; `SSL_CERT_FILE` and `SSL_CERT_DIR` change TLS CA roots. Upcoming 0.1.13 still honors these proxy and CA settings. A proxy that only tunnels HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives; upcoming 0.1.13 disables account-token authentication. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use.
+Both published Windows 0.1.12 and Windows 0.1.13 and later use pinned `huggingface-hub` 1.29.0 and HTTPX 0.28.1 with the default `trust_env=True`: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` affect proxy routing; `SSL_CERT_FILE` and `SSL_CERT_DIR` change TLS CA roots. 0.1.13 and later still honors these proxy and CA settings. A proxy that only tunnels HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives; 0.1.13 and later disables account-token authentication. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use.
 
 Already used Windows 0.1.12? If you ran a model download with a token available
 and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
@@ -57,6 +56,15 @@ If Parakeet fails while transcribing, Presspeech tries Whisper base.en only
 when that English-only model is already installed. It does not download an
 alternate model automatically; a missing fallback leaves the dictation
 undelivered and asks you to retry or choose a model in Settings.
+
+## First-run controls in 0.1.13
+
+Windows 0.1.13 asks before downloading missing first-run model files. Choose the
+offered download or Set Up Later; a complete cached model loads without a
+network request. Check Microphone explicitly opens the selected input for a
+short local level test; changing the selection alone does not start capture.
+Start Presspeech with Windows is off for a new profile, and existing saved
+choices are kept. Hold to talk and Press to toggle are available in Setup.
 
 ## Install
 
@@ -89,7 +97,7 @@ Requirements:
   multilingual default; Windows PCs without usable CUDA automatically start
   with the smaller English-only Whisper base.en CPU model
 
-Upcoming 0.1.13 asks before downloading missing first-run default model files:
+0.1.13 and later asks before downloading missing first-run default model files:
 multilingual Parakeet (up to ~2.5 GB) with usable CUDA, or English-only
 Whisper base.en (~141 MiB) without usable CUDA. On the Parakeet path, choose
 that download, the smaller CPU model, another model in Settings, or
@@ -102,13 +110,13 @@ this choice.
 First launch detects whether the packaged Torch runtime can use NVIDIA CUDA.
 It selects Parakeet for usable CUDA or Whisper base.en otherwise.
 Published 0.1.12 starts a missing selected-model download automatically
-on launch, without asking first. Only upcoming 0.1.13 asks you to confirm a
+on launch, without asking first. Only 0.1.13 and later asks you to confirm a
 missing first-run default-model download. Once it starts, pinned files are fetched
 into `%USERPROFILE%\.cache\huggingface` and loaded and warmed in the background.
 Each Presspeech release pins every Windows Hugging Face model to an exact
 repository commit reviewed for that app version, so a fresh install cannot
 silently receive a different snapshot. Published Windows 0.1.12 does not
-independently verify model-file contents against SHA-256. Upcoming 0.1.13
+independently verify model-file contents against SHA-256. 0.1.13 and later
 verifies every allowed inference file—including present optional configuration—against its
 in-app SHA-256 manifest before loading the model. A mismatch stops loading;
 review network and proxy trust before clearing this model's cache and retrying.
@@ -118,7 +126,7 @@ a metadata-only verification record could miss a same-size rewrite whose
 last-write time was restored. The extra hashing may lengthen model preparation.
 The standard HTTPX proxy and CA settings still apply, so a proxy
 can observe model-request metadata and block a download, but modified model
-bytes fail verification. Upcoming 0.1.13 also applies the following privacy
+bytes fail verification. 0.1.13 and later also applies the following privacy
 policy before any model library imports: it fixes downloads to the public
 `https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
 disables the hf-xet transfer client, disables implicit authentication and
@@ -132,7 +140,7 @@ to regular HTTP downloads; Hugging Face still observes the model request. Every 
 call also declines account tokens and remote model code; Transformers weights
 are required to use safetensors. Inherited Hugging Face endpoint or staging
 settings therefore cannot redirect the app's pinned model request.
-Upcoming 0.1.13 tries the complete pinned inference files locally first, including
+0.1.13 and later tries the complete pinned inference files locally first, including
 when Hub tree metadata is absent. A missing snapshot or required file permits one
 anonymous fetch of the reviewed inference files. Missing optional generation,
 tokenizer or feature-extractor configuration uses the pinned loader's existing
@@ -156,7 +164,7 @@ model unload and is removed after failed loading or normal unload. A process
 crash can leave that private temporary folder behind; no automatic broad cache
 cleanup is performed.
 
-The upcoming 0.1.13 first-run readiness window shows model loading, microphone
+The 0.1.13 and later first-run readiness window shows model loading, microphone
 selection and an on-demand microphone check, a selectable dictation hotkey,
 hold-to-talk or press-to-toggle style, global-listener status, and Start with
 Windows in one place. Published 0.1.12 checks the selected microphone
@@ -190,8 +198,7 @@ index still names the configured microphone, rejecting stale entries when
 re-enumeration shows device reordering after reconnect or resume. For
 **Automatic**, a changed device list causes a fresh selection instead of
 reusing the old index; indistinguishable duplicate device labels are not
-cached. If two safe inputs have the same host API and device name, upcoming
-0.1.13 cannot identify either as a specific saved choice: the picker omits
+cached. If two safe inputs have the same host API and device name, 0.1.13 and later cannot identify either as a specific saved choice: the picker omits
 both, and an existing saved choice remains visible but cannot be used to open
 either microphone while the ambiguity remains. Disconnect one or use **Automatic**
 only if either input is acceptable. Wait
@@ -205,7 +212,7 @@ open again on the next launch. Microphone, hotkey, dictation style, and Start
 with Windows choices are kept when setup is deferred, and a newly selected
 microphone is used immediately by **Try Dictation**. A microphone can still be
 connected later and does not block **Finish Setup** once the speech model is
-ready. Upcoming 0.1.13 also offers **Check Microphone** in Settings for later
+ready. 0.1.13 and later also offers **Check Microphone** in Settings for later
 recovery. It tests the input currently shown in that picker only after you
 choose the command, refreshes the picker after a reconnect, and reports
 connecting, listening, silent, or unavailable status without exposing driver
@@ -250,7 +257,7 @@ Windows treats that key as **AltGr**. Presspeech leaves AltGr available for
 normal typing and does not start dictation from it. Choose **F8** or another
 dictation hotkey in first-run setup.
 
-### Upcoming 0.1.13: delivery recovery
+### 0.1.13 and later: delivery recovery
 
 These recovery controls are not part of the 0.1.12 download above. Builds containing
 this change retain a finished dictation in process memory when clipboard access
@@ -277,7 +284,7 @@ If the original focused window or Win32 control cannot be verified just after
 the paste shortcut is submitted, Presspeech also opens Delivery Recovery even
 when Windows accepted the shortcut. The text may already be in the original
 or another field: check the original and any newly focused field before
-copying again. The upcoming build also compares a private fingerprint of a
+copying again. Windows 0.1.13 also compares a private fingerprint of a
 nonempty foreground-window title at each delivery check. If switching tabs
 changes that title, Presspeech uses Delivery Recovery rather than knowingly
 pasting into the changed tab; a title change within the original tab may also
@@ -332,12 +339,12 @@ current clipboard for Ctrl+V. This operating-system control does not prevent
 another local process or third-party clipboard manager from reading the current
 item. Clipboard sequence checks reduce replacement races; they do not make
 Ctrl+V atomic or acknowledge that the target application consumed the text.
-The upcoming build also checks the clipboard receipt immediately before
+Windows 0.1.13 also checks the clipboard receipt immediately before
 `SendInput` and after the shortcut returns. A detected change before submission
 skips the shortcut; a detected change afterward keeps an in-memory recovery
 copy and reports uncertain delivery. A copy after either check can still race
 the target's asynchronous paste handling.
-Before replacing the clipboard, the upcoming build checks the physical state
+Before replacing the clipboard, Windows 0.1.13 checks the physical state
 of Ctrl, Shift, Alt, Windows, and V as well as its keyboard-hook state. A key
 already held at this preflight leaves the previous clipboard item unchanged and
 keeps the dictation for explicit recovery. It checks again immediately before
@@ -365,8 +372,7 @@ run.bat
 2. Speak.
 3. Release — Presspeech normally pastes the punctuated transcript into the
    window where the recording began. Published 0.1.12 leaves text on the
-   clipboard for manual paste if it cannot verify that destination. Upcoming
-   0.1.13 keeps an undelivered transcript in memory for explicit Copy or
+   clipboard for manual paste if it cannot verify that destination. 0.1.13 and later keeps an undelivered transcript in memory for explicit Copy or
    Discard; an already-known invalid destination does not change the clipboard.
 
 If using the configured key is inconvenient, select **Dictate** from the
@@ -375,17 +381,17 @@ stop. This menu action toggles recording in either dictation style.
 
 For an in-app, click-driven test that does not type into another app, open
 **Try Dictation…** from the notification-area menu. Builds containing the
-upcoming 0.1.13 change also provide a **Try Dictation…** button in Settings.
+0.1.13 and later change also provide a **Try Dictation…** button in Settings.
 In the scratchpad, use **Dictate** to start and stop, then check the result
 there. Use only harmless words: the scratchpad can still use the system
 clipboard (see the [clipboard privacy boundary](https://rcourtman.github.io/presspeech/privacy.html#operating-system-clipboard-services)).
 Text already shown in Try Dictation is not saved: closing the window discards
 it. Select and copy any words you need to keep into a private editor before
 closing; Copy or Cut replaces the current clipboard item.
-In upcoming 0.1.13 builds, Copy and Cut of selected scratchpad text use the
+In 0.1.13 and later builds, Copy and Cut of selected scratchpad text use the
 same history/cloud-excluded clipboard path as dictation delivery. Cut removes
 the selection only after Presspeech confirms the copy.
-In builds containing the upcoming 0.1.13 recovery change, closing Try
+In builds containing the 0.1.13 and later recovery change, closing Try
 Dictation while a finished recording is still transcribing keeps its completed
 text in Delivery Recovery instead of silently losing it or pasting into another
 app. Choose Copy or Discard there before recording again. Closing the window
@@ -396,7 +402,7 @@ not also open a Windows surface or invoke an F8–F12 command in the focused app
 Other keys and AltGr layout input continue to pass through normally.
 
 In published 0.1.12, the short high tone plays before the microphone opens;
-allow the device time to start before speaking. The upcoming 0.1.13 build
+allow the device time to start before speaking. The 0.1.13 and later build
 instead shows **Connecting microphone…** until the input delivers its first
 audio buffer. Its high tone then confirms the microphone is delivering input,
 and **Listening…** confirms Presspeech is accepting speech after the tone and
@@ -410,13 +416,13 @@ the indicator briefly says **No speech detected — try again** and a Windows
 notification points back to Setup's microphone check. If a recognizer instead
 returns blank text without a VAD rejection, the indicator says **No text
 recognized — try again**; that does not claim the microphone captured silence.
-In upcoming 0.1.13, if filler removal or an empty dictionary replacement
+In 0.1.13 and later, if filler removal or an empty dictionary replacement
 leaves nothing to insert, **Nothing to insert** explains the result instead;
 Presspeech does not change the clipboard or paste only the configured suffix
 over a field.
 A quick retry cannot be hidden by the previous message's timeout.
 If captured audio cannot be prepared or the transcription worker cannot start,
-the upcoming build ends **Transcribing…** and briefly shows **Dictation could
+Windows 0.1.13 ends **Transcribing…** and briefly shows **Dictation could
 not start — try again**. It does not copy or paste that recording; retry, or
 restart Presspeech and check the microphone in Setup or Settings if it repeats.
 
@@ -468,14 +474,13 @@ Notepad test does not qualify either remote path. See Microsoft's
 and the [native remote-delivery checklist](../docs/manual-qa.md#windows-release-qualification).
 Each recording is bound to the window that was focused when it began. If focus
 changes while the model is transcribing, Presspeech does not paste private text
-into the wrong window. Published 0.1.12 leaves it on the clipboard; upcoming
-0.1.13 keeps it in Delivery Recovery without replacing the prior clipboard
+into the wrong window. Published 0.1.12 leaves it on the clipboard; 0.1.13 and later keeps it in Delivery Recovery without replacing the prior clipboard
 item when the changed focus is known before the write.
 Where Windows exposes a separate focused child control, Presspeech also checks
 that control before sending Ctrl+V; moving between two native edit controls in
 one window then uses Delivery Recovery instead of automatic paste. Custom-drawn
 browser and Electron fields can share one Win32 control handle, so this is not
-a guarantee of field identity within those apps. Upcoming 0.1.13 additionally
+a guarantee of field identity within those apps. 0.1.13 and later additionally
 compares a private fingerprint of the top-level window title, catching a tab
 switch when it changes the title. Recognized browser executables also require
 a nonempty title fingerprint and a matching UI Automation Edit-element
@@ -490,7 +495,7 @@ manual recovery. Keep the intended field
 focused until delivery finishes, and review where the text landed.
 If a control is identifiable only at the later delivery check, Presspeech
 cannot confirm it was focused when recording began and uses Delivery Recovery.
-Upcoming 0.1.13 also uses Delivery Recovery when Windows' focused-control
+0.1.13 and later also uses Delivery Recovery when Windows' focused-control
 query fails or disagrees with the foreground window, even if both failed
 observations concern the same window. In that case it does not replace the
 previous clipboard item if the failure is known before copying. A completed
@@ -500,7 +505,7 @@ check proves that a target consumed the paste.
 [Windows prevents](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput#remarks)
 a standard app from sending simulated input into an app running as administrator.
 Presspeech detects that boundary. Published 0.1.12 leaves the transcript on
-the clipboard for manual paste; upcoming 0.1.13 preserves the previous
+the clipboard for manual paste; 0.1.13 and later preserves the previous
 clipboard item and offers explicit Copy or Discard. You can also reopen the
 target without **Run as administrator**. Do not elevate Presspeech to work
 around it.
@@ -525,7 +530,7 @@ The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Dictate** (toggle), **Cancel Dictation (Esc)** while recording,
 **Try Dictation…** (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
 **Check for Updates…**, **Copy Diagnostics**, **Report a Problem…**, **Suggest an
-Improvement…**, **Repair Global Hotkey**, and **Exit**. Upcoming 0.1.13 / builds
+Improvement…**, **Repair Global Hotkey**, and **Exit**. 0.1.13 and later / builds
 containing **Test App Compatibility…** also open the privacy-safe repeated
 target-app guide and add **Review Available Update…** (enabled after a newer
 release is found). **Report a Problem…** and **Suggest an Improvement…** both
@@ -567,7 +572,7 @@ If the configured key stops responding while menu-based **Dictate** still
 works, choose **Repair Global Hotkey** from the notification-area menu, Setup,
 or Settings. Presspeech replaces the Windows keyboard listener even when its
 thread still appears healthy, then reports whether the new listener started.
-In upcoming 0.1.13, **Listener started** means only that its thread launched;
+In 0.1.13 and later, **Listener started** means only that its thread launched;
 [Windows can silently remove a low-level hook](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)
 without notifying the app.
 **Key just detected** appears briefly after Presspeech sees a physical press
@@ -575,7 +580,7 @@ of the configured key, not as a promise that the hook will keep working.
 Use **Try Dictation** with harmless text to confirm capture and insertion;
 if the key stops working later, use **Repair Global Hotkey** even if the
 status still says **Listener started**.
-Upcoming 0.1.13 also dispatches ordered press/release actions to a dedicated
+0.1.13 and later also dispatches ordered press/release actions to a dedicated
 worker so target discovery, recording setup, logging and recovery UI never run
 inside Windows' time-limited low-level keyboard-hook callback.
 In source builds preparing 0.1.13, locking or disconnecting the Windows session
@@ -622,10 +627,10 @@ again; unsaved edits remain in place while it waits.
 - Mute every active Windows playback endpoint while recording, restoring each
   device's previous mute state afterwards
 - A click-through **Connecting microphone… / Listening… / Transcribing…**
-  indicator on the active display in the upcoming 0.1.13 build
+  indicator on the active display in the 0.1.13 and later build
 - Optional GitHub update checks at startup when the recorded check is at least
   24 hours old. Published 0.1.12 records only successful checks, so a failed
-  check can repeat after each restart; upcoming 0.1.13 records automatic
+  check can repeat after each restart; 0.1.13 and later records automatic
   attempts before connecting and offers unrestricted manual retries. When an
   automatic check finds a release, it notifies without opening a window over
   the field where you may be dictating. Choose **Review Available Update…**
@@ -634,7 +639,7 @@ again; unsaved edits remain in place while it waits.
   The pending review action remains available if the notification is missed.
   Downloads and installation require approval, mutable releases are ignored,
   and the installer is verified by size and SHA-256 after download and again
-  immediately before launch. Upcoming 0.1.13 postpones installer launch while
+  immediately before launch. 0.1.13 and later postpones installer launch while
   a dictation is starting, recording, canceling, transcribing, or waiting in
   Delivery Recovery. The verified installer stays in the update window for an
   explicit **Install Update** retry after the dictation is resolved; closing
@@ -667,7 +672,7 @@ If the **Start with Windows** choice cannot be applied, **Finish Setup** keeps
 Setup open and Settings reports that the startup state was not updated instead
 of claiming success. Use **Open Startup Settings** to review Presspeech under
 Windows **Settings → Apps → Startup**, then retry **Finish Setup** or **Save**.
-In the upcoming 0.1.13 build, leaving Start with Windows off on a new profile
+In the 0.1.13 and later build, leaving Start with Windows off on a new profile
 does not require an existing per-user startup registry key; opting in creates
 it if needed. A failed first-run registration also leaves
 Setup incomplete, so it reopens on the next launch. **Set Up Later** can close
@@ -688,7 +693,7 @@ Setup after an explicit warning if the startup setting cannot be fixed now.
 - **Copy Diagnostics** includes configuration counts, runtime state, and
   microphone availability, never transcripts, audio, dictionary contents,
   exact microphone names, raw error details, or raw log lines.
-- Upcoming 0.1.13 marks transcript, recovery, Try Dictation scratchpad Copy/Cut,
+- 0.1.13 and later marks transcript, recovery, Try Dictation scratchpad Copy/Cut,
   and user-requested diagnostics copies for exclusion from Windows Clipboard
   History and Cloud Clipboard;
   they remain available for local Ctrl+V. Published 0.1.12 does not apply this
@@ -749,7 +754,7 @@ $env:PIP_CONFIG_FILE = 'NUL'
 .\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes -r requirements-cuda-release.txt
 .\.release-venv\Scripts\python -m pip check
 powershell -ExecutionPolicy Bypass -File .\build-release.ps1 `
-  -Version 0.1.12 -Python .\.release-venv\Scripts\python.exe
+  -Version 0.1.13 -Python .\.release-venv\Scripts\python.exe
 ```
 
 For source builds containing this hash lock, `requirements-release.txt` lists

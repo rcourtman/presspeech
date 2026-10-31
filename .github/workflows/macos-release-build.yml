@@ -1,0 +1,54 @@
+name: macos release build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "macOS release version to prepare for local signing"
+        required: true
+        type: string
+      expected_sha:
+        description: "Approved main commit (40-character SHA)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate approved source
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_SHA" == "$GITHUB_SHA" ]]
+          [[ "$(uname -m)" == arm64 ]]
+      - name: Swift self-tests
+        working-directory: swift
+        run: swift run -c debug Presspeech --self-test all
+      - name: Packaged app smoke test
+        run: scripts/smoke-packaged-app.sh
+      - name: Swift release build
+        working-directory: swift
+        run: swift build -c release
+      - name: Export verified build
+        run: |
+          build=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' swift/Info.plist)
+          python3 scripts/macos-build-artifact.py create --root . \
+            --binary swift/.build/release/Presspeech \
+            --directory "$RUNNER_TEMP/macos-release-build" \
+            --version "$RELEASE_VERSION" --build "$((build + 1))"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: macos-release-build
+          path: ${{ runner.temp }}/macos-release-build/
+          retention-days: 14

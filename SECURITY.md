@@ -11,7 +11,7 @@ require an account token. The 0.1.12 loader also honors inherited
 `HF_ENDPOINT`/`HUGGINGFACE_CO_STAGING` settings, which can change the request
 destination, and may add `HF_HUB_USER_AGENT_ORIGIN` to request metadata. A
 locally available token may therefore accompany a request to a configured
-endpoint. Upcoming Windows 0.1.13 fixes those settings and adds runtime-verified
+endpoint. Windows 0.1.13 and later fixes those settings and adds runtime-verified
 telemetry and authentication opt-outs. The released 0.1.12 dependency also pins
 `huggingface-hub` 1.29.0, whose telemetry-enabled header builder may request
 `/api/agent-harnesses` when its local registry cache is missing or stale and
@@ -20,7 +20,7 @@ markers. The 0.1.13 candidate disables Hub telemetry before imports and checks
 that the rendered model-request headers contain no agent label; do not
 attribute those controls to 0.1.12.
 
-Both published Windows 0.1.12 and upcoming Windows 0.1.13 use the pinned
+Both published Windows 0.1.12 and Windows 0.1.13 and later use the pinned
 `huggingface-hub` HTTPX client with its default `trust_env=True`. It honors
 inherited `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` routing, plus
 `SSL_CERT_FILE` and `SSL_CERT_DIR` CA overrides. These standard proxy and CA
@@ -76,7 +76,7 @@ auto-generated, and concealed markers, asking cooperating clipboard managers
 not to archive or visibly expose transcript entries; these advisory markers do
 not constrain arbitrary local readers.
 Published Windows 0.1.12 clipboard writes can enter Windows Clipboard History
-or Cloud Clipboard. The upcoming 0.1.13 candidate adds Microsoft's
+or Cloud Clipboard. The Windows 0.1.13 and later candidate adds Microsoft's
 history/cloud exclusion format to transcript writes, but the current clipboard
 remains available to other local software and remote-session clipboard routes
 are separate boundaries. See the
@@ -219,7 +219,7 @@ machine is still supported; Presspeech verifies that cache before loading
 it.
 
 On Windows, each selectable model is likewise pinned to a full Hugging Face
-repository commit. Upcoming Windows 0.1.13 applies its network policy before importing
+repository commit. Windows 0.1.13 and later applies its network policy before importing
 Transformers, faster-whisper, or huggingface_hub: it fixes the public
 `https://huggingface.co` endpoint, disables Hub telemetry and request debug
 logging, disables the hf-xet transfer client and implicit authentication,
@@ -231,7 +231,7 @@ backends require safetensors weights. The packaged-app self-test verifies the
 policy values cached by the actual bundled libraries so an incompatible
 dependency change fails the release build. Published Windows 0.1.12 does not
 independently verify model-file contents against SHA-256 and trusts the pinned
-Hub snapshot and HTTPS storage path. Upcoming Windows 0.1.13 verifies every
+Hub snapshot and HTTPS storage path. Windows 0.1.13 and later verifies every
 allowed required and present optional inference file against a SHA-256 manifest tied to the pinned
 repository revisions before backend loading. A mismatch fails closed, including
 when the response has the expected size; no alternate or unpinned model is
@@ -248,7 +248,7 @@ Hub then uses regular HTTP downloads rather than the hf-xet transfer client. Thi
 separate transfer-performance telemetry, but model requests remain visible to
 Hugging Face. A changed Hub download path still requires review.
 
-Upcoming Windows 0.1.13 resolves an explicit inference-file set for each pinned
+Windows 0.1.13 and later resolves an explicit inference-file set for each pinned
 revision, tries local-only resolution first, and permits one anonymous download
 only when that snapshot or a required file is missing. Explicit offline settings
 are preserved. Present malformed input and backend parsing failures do not
@@ -257,5 +257,5 @@ no-token and existing remote-code/safetensors restrictions. Whisper's tokenizer
 and configuration are copied into a private model-lifetime directory so cache
 path deletion cannot select its upstream unpinned tokenizer fallback. Weight hard
 links isolate path deletion, not in-place modification. The SHA-256 manifest
-check is new in the upcoming 0.1.13 candidate and is not present in published
+check is new in the Windows 0.1.13 and later candidate and is not present in published
 0.1.12.

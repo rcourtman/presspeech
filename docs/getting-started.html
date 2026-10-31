@@ -61,14 +61,14 @@
             </li>
             <li id="windows-launch-decision">
               <h3>Windows 0.1.12 — wait if privacy risks are unclear</h3>
-              <p><strong>Wait for published 0.1.13</strong> if you want to avoid possible Hugging Face usage telemetry, an available token or custom download route may be configured, or you are unsure. If you install but wait, leave <strong>Launch Presspeech</strong> unchecked.</p>
+              <p><strong>Choose 0.1.13 or later</strong> if you want to avoid possible Hugging Face usage telemetry, an available token or custom download route may be configured, or you are unsure. If you install but wait, leave <strong>Launch Presspeech</strong> unchecked.</p>
               <p><strong>Download size and language:</strong> on a fresh PC with usable NVIDIA CUDA, the missing default model is about 2.5 GB and multilingual; without usable CUDA, the CPU default is about 141 MiB and English-only. <a href="windows.html#language-support">Check language support before downloading</a>.</p>
               <p><strong>Routing risk:</strong> A custom route can change where the request and token go; a TLS-inspecting proxy trusted by the client can read the token. If such a proxy's trust is unclear, do not launch while it is in use.</p>
-              <p>Published 0.1.12 also briefly opens the selected microphone for an automatic local readiness check in first-run Setup; samples are discarded, not saved or sent. If you do not want that check, leave 0.1.12 unopened. Upcoming 0.1.13 waits for an explicit <strong>Check Microphone</strong> choice.</p>
-              <p>Read the <a href="windows.html#model-download-privacy">full Windows warning</a> before deciding to launch. The upcoming build disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings.</p>
+              <p>Published 0.1.12 also briefly opens the selected microphone for an automatic local readiness check in first-run Setup; samples are discarded, not saved or sent. If you do not want that check, leave 0.1.12 unopened. 0.1.13 and later waits for an explicit <strong>Check Microphone</strong> choice.</p>
+              <p>Read the <a href="windows.html#model-download-privacy">full Windows warning</a> before deciding to launch. The Windows 0.1.13 disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings.</p>
             </li>
           </ul>
-          <p>The public models need no account token, and model requests do not include dictation audio or transcripts. Do not inspect or share token values. Windows 0.1.13 is <strong>not published yet</strong>; check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a> before following a newer guide. Source can be ahead of downloads. If you choose to launch now, read your platform's full warning and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+          <p>The public models need no account token, and model requests do not include dictation audio or transcripts. Do not inspect or share token values. <strong>Verify published download availability</strong> in <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a> before following a newer guide. Source can be ahead of downloads. If you choose to launch now, read your platform's full warning and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
         </div>
         <div class="actions">
           <a class="button" href="install.html">Install on macOS</a>
@@ -116,7 +116,7 @@
               <p><a href="install.html">Install the macOS release</a></p>
             </article>
             <article class="card" id="windows">
-              <h3>Windows 0.1.12 prerelease</h3>
+              <h3>Windows 0.1.13 prerelease</h3>
               <ol class="steps">
                 <li>
                   <strong>Check this PC</strong>
@@ -124,7 +124,7 @@
                 </li>
                 <li>
                   <strong>Check language and download size</strong>
-                  <p>Allow about 4.4 GB for the app plus a first model download: usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB); without usable CUDA, the CPU default is English-only Whisper base.en (~141 MiB). A missing selected model starts downloading on first launch. See the <a href="windows.html#language-support">full language and model guide</a>.</p>
+                  <p>Allow about 4.4 GB for the app plus a first model download: usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB); without usable CUDA, the CPU default is English-only Whisper base.en (~141 MiB). Windows 0.1.13 asks before downloading missing first-run files. Choose the offered download or Set Up Later; a complete cached model loads without another request. See the <a href="windows.html#language-support">full language and model guide</a>.</p>
                 </li>
                 <li>
                   <strong>Verify before running</strong>
@@ -164,20 +164,11 @@
               </ol>
             </article>
             <article class="card">
-              <h3>On Windows</h3>
+              <h3>On Windows 0.1.13</h3>
               <ol class="steps">
-                <li>
-                  <strong>Reach Ready</strong>
-                  <p>Wait until local model preparation finishes and <strong>Try Dictation</strong> becomes available. In 0.1.12, <strong>Set Up Later</strong> does not stop a missing-model download that began on launch.</p>
-                </li>
-                <li>
-                  <strong>Check the microphone</strong>
-                  <p>0.1.12 checks the selected microphone automatically at startup and when its selection changes; choose <strong>Check Again</strong> to repeat it. The check briefly opens the selected input to measure its level; samples stay in memory and are discarded, not saved, sent, or transcribed. Windows may show its <a href="https://support.microsoft.com/en-us/windows/privacy/windows-camera-microphone-and-privacy">microphone-use indicator</a> while the input is open. Speak during the check; if no level appears, select or unmute the correct input and repeat <strong>Check Again</strong>.</p>
-                </li>
-                <li>
-                  <strong>Choose the hotkey and finish</strong>
-                  <p>The default is <strong>Right Alt</strong>. If it acts as AltGr, choose F8 or another available key. On a new profile, 0.1.12 selects <strong>Start Presspeech with Windows</strong> by default; turn it off before choosing <strong>Finish Setup</strong>, <strong>Set Up Later</strong>, or closing Setup if you do not want the app at sign-in. Its Setup has no dictation-style selector: choose <strong>Press to toggle</strong> in Settings. Review these choices, then finish setup. See the <a href="windows.html#first-launch">version-specific first-launch steps</a>.</p>
-                </li>
+                <li><strong>Prepare the model or defer</strong><p>Choose the offered download or Set Up Later; a complete cached model loads without another request. Wait for Ready before testing dictation.</p></li>
+                <li><strong>Check the microphone explicitly</strong><p>Choose <strong>Check Microphone</strong> to open the selected input briefly for a local level check. Changing the selection alone does not start capture. Samples are discarded, not saved, sent or transcribed. Speak during the check; select or unmute the correct input and retry if no level appears.</p></li>
+                <li><strong>Choose the style, hotkey and startup</strong><p>Choose Hold to talk or <strong>Press to toggle</strong> in Setup. Right Alt is the default; choose F8 or another key if it acts as AltGr. <strong>Start Presspeech with Windows</strong> is off for a new profile; existing saved choices are retained. Review startup before choosing Finish Setup or Set Up Later. Try Dictation needs a ready model; Finish Setup also requires the global listener. Microphone readiness is advisory. See the <a href="windows.html#first-launch">first-launch steps</a>.</p></li>
               </ol>
             </article>
           </div>

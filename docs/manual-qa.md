@@ -610,7 +610,7 @@ keyboard access testing in addition to assistive-technology testing.
   in an unrelated focused app. Injected keys and AltGr text-entry chords must
   not count as a physical configured-key confirmation. A status change alone
   does not prove that dictation started or that the hook will remain installed.
-- On the upcoming 0.1.13 candidate, repeat a cold microphone start with cues
+- On the 0.1.13 and later candidate, repeat a cold microphone start with cues
   on and off and with a USB or Bluetooth input after reconnect/resume. Confirm
   **Connecting microphone…** appears first; neither the high cue nor
   **Listening…** may appear before the stream delivers input. Once the high cue
@@ -767,7 +767,7 @@ keyboard access testing in addition to assistive-technology testing.
   separate Notepad instance with **Run as administrator**, dictate into it, and
   confirm Presspeech sends no simulated paste shortcut and reports the Windows
   administrator boundary. Published 0.1.12 leaves the transcript on the
-  clipboard for manual paste. In the upcoming 0.1.13 build, the existing
+  clipboard for manual paste. In the 0.1.13 and later build, the existing
   clipboard item remains current and the transcript waits in Delivery Recovery
   until explicit Copy or Discard. Do not elevate Presspeech.
 
@@ -1782,7 +1782,7 @@ intentional candidate-API pin, use
 `--include-candidate-models --allow-candidate-dependency` only for candidate
 evidence; restore the exact app pin before recording a production release pass.
 
-## Windows delivery recovery (upcoming 0.1.13)
+## Windows delivery recovery (0.1.13 and later)
 
 Use a disposable Windows desktop and benign synthetic text for clipboard/input
 qualification. The native unit probe checks the ABI, synthetic Unicode payload

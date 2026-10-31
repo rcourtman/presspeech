@@ -174,8 +174,8 @@ afterward.
 already-configured or saved token; custom routing can change its destination.
 A TLS-inspecting HTTPS proxy trusted by the client can read any token sent. If
 you want to avoid possible telemetry, are concerned about a token or custom
-route, or are unsure, do not start another download; wait until Windows 0.1.13
-is published and installed. If a TLS-inspecting proxy is in use and its trust
+route, or are unsure, do not start another download; first verify that
+Windows 0.1.13 or later is installed. If a TLS-inspecting proxy is in use and its trust
 is unclear, do not launch while it is in use. Read the
 [full Windows privacy decision](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
 before retrying.
@@ -192,7 +192,7 @@ An uncached alternative can also download files.
 
 Published Windows 0.1.12 checks the selected input automatically during Setup
 and when its selection changes; choose **Check Again** to repeat that check.
-Upcoming 0.1.13 and builds
+0.1.13 and later and builds
 containing this change keep the selected device closed until you choose
 **Check Microphone** in Setup or Settings. In 0.1.13, Settings checks the
 input shown in its picker before Save, but only Save changes the dictation
@@ -260,7 +260,7 @@ is not restored after recording.
 Choose **Open Startup Settings**, find Presspeech under **Settings -> Apps ->
 Startup**, and review the system setting. Return to Setup or Settings and retry
 **Finish Setup** or **Save**. **Finish Setup** stays open if registration fails.
-In upcoming Windows 0.1.13, **Set Up Later** instead shows a warning and closes
+In Windows 0.1.13 and later, **Set Up Later** instead shows a warning and closes
 without completing setup; the guided setup returns on the next launch.
 
 ## Report A Problem Safely
@@ -300,7 +300,7 @@ errors can contain private names or paths. Do not add dictated text, audio,
 references, dictionary or shortcut contents, credentials, or other private data
 yourself.
 
-### Windows Delivery Recovery in Upcoming 0.1.13
+### Windows Delivery Recovery in 0.1.13 and later
 
 These controls are not included in Windows 0.1.12. In builds containing the new
 recovery actions, clipboard failure, a newer clipboard copy, an unavailable

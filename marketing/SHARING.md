@@ -37,7 +37,7 @@ native release checks.
 notes](https://github.com/rcourtman/presspeech/releases/tag/v0.3.8) invite
 compatibility reports but do not mention that new issues are restricted or
 surface the inherited-token and malformed-proxy model-download warnings. The
-published [Windows 0.1.12 release notes](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12)
+published [Windows 0.1.12 release notes](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.13)
 likewise omit that build's model-download telemetry, token, and routing caveat.
 The README and install guides carry the version-specific decisions, but a
 visitor can download from a release page without reading them. Before linking

@@ -236,6 +236,23 @@ installer, and verifies startup, user-data preservation and uninstall. It
 publishes qualification evidence, without publishing an app release. Use
 `full_package=false` for the transaction matrix alone.
 
+## Hosted macOS release builds
+
+When local resources cannot support compilation, dispatch
+`macos-release-build.yml` on `main` with the intended version and the exact
+approved commit as `expected_sha`. It runs the debug self-tests, packaged-app
+smoke test and optimised Apple silicon build on a hosted Mac. After that run
+and the main checks pass, use `./ship-swift.sh --version X.Y.Z --build-run ID`
+from the matching clean checkout.
+
+The release script verifies the successful workflow, source commit, input
+hashes, executable hash, architecture and target version before packaging.
+Developer ID signing, notarisation, stapling and Gatekeeper assessment still
+run locally using the existing release credentials. Signing keys and notary
+credentials are not uploaded to the hosted runner. This path preserves the
+normal immutable release and Homebrew verification gates; it does not waive
+native hardware testing or claim that the model-free checks cover it.
+
 ## Pull requests
 
 - Keep the diff focused on one change.

@@ -59,6 +59,8 @@ better.
 
 ## Install
 
+> Windows 0.1.13 asks before missing first-run model downloads and offers Set Up Later.
+>
 > **Before opening a published build:** check [GitHub Releases](https://github.com/rcourtman/presspeech/releases)
 > and the deployed install guide for your platform
 > ([macOS](https://rcourtman.github.io/presspeech/install.html#direct-download) or

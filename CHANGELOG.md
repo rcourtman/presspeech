@@ -984,6 +984,305 @@ rm -f ~/Library/LaunchAgents/com.local.presspeech.plist
 
 ## Windows
 
+<a id="windows-0.1.13"></a>
+
+### Windows 0.1.13 (2026-10-31)
+
+[GitHub release](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.13)
+
+> **Before launching Windows 0.1.13:** Setup asks before the first missing
+> model download and offers deferral; a complete cached model loads without a
+> request. Model downloads use the network. This release disables bundled Hub
+> telemetry and account-token authentication, but configured proxy and CA
+> settings still apply. Review their trust before choosing a download.
+> Dictation audio and transcripts are not sent in model requests. Read the
+> [Windows model-download privacy guide](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
+> before launching or clearing a working cache.
+
+#### Safer installation and upgrades
+
+- Stage the complete new runtime in a separate immutable bundle, verify its
+  file and directory inventory and SHA-256 hashes, then activate the launcher
+  after the installer commits. Interrupted copying, cancellation, insufficient
+  space or a refused launcher replacement preserve the existing working app.
+- Allow free space for the complete new bundle (about 4.4 GB) plus 256 MiB of
+  headroom while the old bundle remains installed, in addition to the downloaded
+  installer and model caches. Silent upgrades enforce the same check.
+- Reuse an intact bundle on identical reinstall. Refuse to overwrite a damaged
+  active bundle: uninstall and reinstall, or use a newer package. Settings and
+  model caches are retained by uninstall.
+- Recover owned interrupted staging and installer artifacts; remove marked
+  superseded bundles after activation. Preserve unrelated generations and
+  reparse targets. Unlogged legacy runtime files in a custom shared install
+  location are retained for manual review.
+- Generate frozen COM wrappers in memory and disable bytecode writes into the
+  verified bundle.
+
+This remains a prerelease. Hosted qualification covers native installer failure
+and recovery paths, full upgrades from the immutable 0.1.11 and 0.1.12 installers,
+repeat installation, installed CPU model loading and decoder warm-up, startup
+and data preservation, and uninstall. Physical microphone/input, target-app
+delivery, GPU, sleep/wake and hardware power-loss testing remain deferred; those
+paths are not represented as qualified. Audio retention is unchanged.
+
+#### Model-download privacy correction
+
+Windows 0.1.12 left Hugging Face Hub/Transformers usage telemetry enabled
+during model downloads and allowed default implicit authentication. An
+available Hugging Face token could accompany a request; inherited
+`HF_ENDPOINT` or `HUGGINGFACE_CO_STAGING` settings could route that request to
+a configured endpoint. This release disables Hub telemetry and implicit
+authentication before the model libraries load, removes inherited token and
+origin values from Presspeech's process, and fixes the public Hub endpoint.
+The public models do not require an account token. Model downloads do not
+contain dictation audio or transcripts.
+
+The bundled Hub client continues to honor the user's configured HTTPX proxy
+and certificate settings (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+`NO_PROXY`, `SSL_CERT_FILE`, and `SSL_CERT_DIR`). A proxy that only tunnels
+HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS
+proxy whose CA is trusted by the client can read model-request headers, but
+this release does not send an account token. Review the proxy and certificate
+configuration used for model downloads.
+
+Before a model is loaded, Presspeech checks every allowed inference file
+against SHA-256 digests pinned to the selected repository commit. A local
+verification record is not trusted on Windows: the reviewed files are rehashed
+on every load, and a mismatch is rejected even if the file has the expected
+length. This may lengthen model preparation. Review network/proxy trust
+before clearing that model's cache and retrying. Published Windows 0.1.12 does
+not include this model-file integrity check.
+
+If Windows 0.1.12 downloaded a model while a token was available, and its
+inherited Hub endpoint routed the request to a destination you do not trust or
+a TLS-inspecting HTTPS proxy whose CA was trusted by the client could read the
+request, treat the token as disclosed to that destination or proxy: [revoke it
+and create a replacement at Hugging Face](https://huggingface.co/settings/token).
+Never include token values in logs or support reports.
+
+- Stop the installer before extraction on pre-Windows 10 systems and Windows
+  on Arm, matching the documented native x64 Windows 10/11 support boundary.
+- Ask before fetching missing first-run default-model files: multilingual
+  Parakeet is about 2.5 GB with usable CUDA, and English-only Whisper base.en
+  is about 141 MiB without it. Setup offers the available default download,
+  an alternate model in Settings, or deferral; the Parakeet path also offers
+  the smaller CPU model. A complete local snapshot still loads without another
+  prompt. Hidden model-choice shortcuts remain disabled until consent choices
+  are shown.
+- Keep each first-run download button's accessible name concise and expose the
+  model-request privacy boundary as its accessible description, including the
+  no-token/no-telemetry policy and the configured proxy/CA and TLS-inspection
+  caveat.
+- Show local-cache checking, file download, model loading, and warm-up as
+  separate Setup phases. During a model download, show received bytes and the
+  file size for the current transfer when available. Do not present this as a
+  cumulative model count: Hub transfers can be parallel, and the number and
+  total size of missing files vary with the local cache. Keep the overall model
+  indicator indeterminate rather than implying whole-model completion, and do
+  not estimate a percentage or remaining time. Announce phase changes to
+  screen readers without repeatedly announcing byte-count updates.
+- Explain the no-CUDA language tradeoff in Setup before model preparation:
+  the CPU default is English-only, and the currently available multilingual
+  models require a supported NVIDIA GPU.
+- Keep **Start with Windows** off by default for new profiles while retaining
+  saved preferences; users can opt in from Setup or Settings.
+- Retain a finished dictation in memory when clipboard access fails, its original
+  target cannot be used, a newer copy replaces it before paste, a paste key is
+  held, or keyboard delivery becomes uncertain. Recording waits until you
+  review that text. A held key detected before the clipboard write leaves the
+  previous clipboard item unchanged. A missing, already-unfocused, or elevated
+  original target also leaves that item unchanged, as does an unreadable input
+  integrity level for either Presspeech or the target. Copy in Delivery
+  Recovery is the explicit way to put the waiting text on the clipboard. A
+  failed or incoherent Windows focused-control query now uses Recovery instead
+  of treating two failed queries as proof that focus stayed in the same field.
+- Compare a private fingerprint of the original window caption at delivery.
+  A browser-tab switch that changes the caption uses Delivery Recovery rather
+  than automatic paste; a changing title in the original tab may also require
+  recovery. For recognized browsers, also require the same focused UI
+  Automation Edit element before auto-paste. A missing or changed identity
+  uses Delivery Recovery, including same-title tabs or fields that expose
+  different elements. Only an opaque element identifier is retained, not its
+  text or name. Provider IDs can be absent or reused, and unknown browsers or
+  embedded webviews need native qualification. No caption text is kept or
+  logged.
+- Preserve the Newline suffix and repeated paragraph breaks when dictation or
+  recovery text is pasted into standard Windows text controls.
+- Remove "um" and "er", and apply British spelling, only when English is
+  declared: turn on **My dictation is in English** in Settings, or choose an
+  English-only model. "um" and "er" are also German, Dutch, Danish, Swedish
+  and Portuguese words, and US-to-British spelling rewrote Spanish "color"
+  and "favor"; Windows 0.1.12 changed them in every language. Without the
+  setting, Parakeet and Whisper turbo dictation keeps "um", "er" and its
+  spelling, while "uh", "hmm", "erm" and stretched "umm" are still removed.
+  Even with English declared, the check uses a list of common words, so it
+  can miss English and cannot read every language: a dictation containing a
+  listed non-English word or an accented letter keeps "um" and "er"; one is
+  removed only in a sentence with a listed English word and only when commas
+  or sentence punctuation set it apart or listed English words sit on both
+  sides; "ER" and "UM" abbreviations stay; and US spellings that are also
+  words in another language ("color", "liter", "dialog") change only beside
+  a listed English word. "Uh", "ah" and "umm" capitalised mid-sentence or
+  before a capitalised word ("Umm Qasr", "Ah Q") are now kept as names.
+  Saved settings are kept: to restore English cleanup with Parakeet or
+  Whisper turbo, turn the new setting on.
+- If the recognizer returns only whitespace, or filler removal or an empty
+  dictionary replacement leaves nothing to insert, do not replace selected
+  text with an empty item or suffix alone. Explain the result without changing
+  the clipboard or sending a paste shortcut. Explicit whitespace and
+  punctuation replacements remain usable.
+- Open a keyboard-accessible **Delivery Recovery** window when text needs
+  review, without displaying or implicitly copying the dictation. It keeps
+  Copy, Discard and Leave Waiting available even when Windows notifications are
+  suppressed or the notification-area icon is hidden. The window and Copy
+  button disclose that explicit Copy replaces the current clipboard item,
+  including non-text content, and does not restore it afterward.
+- Add **Review Undelivered Dictation…**, **Copy Undelivered Dictation (replaces
+  clipboard)**, and **Discard Undelivered Dictation** notification-area actions.
+  A blocked hotkey or a second launch reopens the recovery window; Exit forgets
+  retained text without changing the clipboard. Copy and Discard stay disabled
+  when no text is waiting, and each resolves only the oldest recovery item if concurrent
+  delivery failures left another item to review.
+- Postpone an approved update while a dictation is active or waiting in
+  Delivery Recovery, instead of exiting and discarding it. The update window
+  keeps its verified installer for an explicit **Install Update** retry after
+  the dictation is resolved; closing the window removes the temporary installer.
+- Open the update window with **Later** focused and no default download action;
+  make **No** the default in the later installer confirmation. An incidental
+  Enter as either prompt appears no longer authorizes a download or launch.
+- Capture clipboard write receipts while Windows still excludes other writers,
+  and recheck before sending the paste shortcut. Check Win32's accepted-event
+  count for the complete keyboard batch; a zero or partial result retains the
+  dictation for recovery. A reported zero count is labelled as a rejected
+  shortcut rather than an uncertain paste and sends no cleanup key-ups;
+  a nonzero partial result or exception with no count still gets conservative
+  best-effort key-up cleanup.
+- Refresh microphone discovery when Setup checks a reconnected input, while
+  retaining an unavailable explicit selection instead of silently switching to
+  Automatic. A selection changed during recording applies to the next
+  dictation; the active stream keeps its original sample rate through final
+  resampling. Before reusing a cached PortAudio index, confirm that it still
+  identifies the configured microphone and remains an allowed input, rejecting
+  stale or unsafe cache entries after device reordering.
+- Offer the same explicit microphone level check in Settings after first-run
+  setup, with live status and direct Windows privacy/sound links. It can test
+  an unsaved picker choice without changing the dictation input; Save remains
+  necessary to use that choice. Reconnected inputs refresh in the picker, and
+  active dictation postpones the check instead of opening another microphone.
+- Show **Connecting microphone…** while opening an input and waiting for its
+  first audio buffer. Do not announce **Listening…** or accept audio until the
+  start cue has finished and playback muting has been attempted. An input that
+  starts but delivers no buffer reports a microphone error instead of falsely
+  claiming readiness; a release handled during startup stops without a
+  post-roll delay, discards any racing buffer, and says to try again rather
+  than letting a subsequent callback revive Listening or play a stop cue.
+- End the Transcribing state and show a content-free retry notice if captured
+  audio cannot be prepared or model work cannot be queued. No clipboard write
+  or paste is attempted for that recording.
+- Keep target discovery, logging and recording work off Windows' low-level
+  keyboard-hook callback. Press and release actions remain ordered on a
+  dedicated worker while the native hook promptly reserves the configured key,
+  reducing the risk that Windows silently removes a timed-out global hook.
+- Replace the global hotkey listener after Windows unlock, reconnect or an
+  interactive wake, even when its thread still appears alive. Lock, disconnect
+  or suspend discards an active capture without transcribing; a busy dictation
+  defers listener replacement, and manual Repair remains the fallback.
+- Show **Listener started**, rather than claiming the global hotkey is
+  continuously ready. Briefly show **Key just detected** after a physical
+  configured-key press; Windows can silently remove the hook later, so use
+  **Repair Global Hotkey** if the key stops responding.
+- Mark every dictation clipboard write as excluded from Windows Clipboard
+  History and Cloud Clipboard before publishing any transcript bytes. The text
+  remains on the current clipboard for automatic or deliberate Ctrl+V; third-
+  party clipboard readers remain a separate privacy boundary.
+- Use the same Windows history/cloud exclusion for the user-requested
+  privacy-safe diagnostics copy, while keeping it available for deliberate
+  local Ctrl+V.
+- Apply model-download privacy controls before dependencies load: remove
+  inherited account tokens and User-Agent origin data, fix the public Hub
+  endpoint, disable Hub telemetry and HTTP request debug logging, bypass the
+  separate hf-xet transfer client, and replace Transformers' random session
+  identifier with a fixed non-unique value. Downloads continue over regular
+  HTTPS. Require safetensors and reject remote model code.
+- Show the release notes in the Windows update window before installer download,
+  as bounded plain text with Markdown links kept inactive.
+- Load complete pinned models from the local cache before contacting the Hub.
+  Missing optional settings use existing local defaults; corrupt files and
+  permission failures remain visible errors. Explicit offline mode prevents
+  download fallback, and Whisper keeps its required tokenizer in a private
+  model-lifetime directory so cache cleanup cannot trigger an unrelated fetch.
+- Report selected-model loading failures without automatically downloading a
+  different model. Existing fallback for a failed Parakeet decode remains.
+- Suppress recognizer exception text and tracebacks in the persistent log and
+  failure notifications. Those upstream details can contain a partial decoded
+  hypothesis; fixed recovery guidance now replaces them.
+- Keep unexpected window-action failures visible through rate-limited generic
+  notices and an aggregate diagnostics count, without exposing Tk tracebacks or
+  raw model-load and benchmark-save error text. The windowed installer also hides
+  full tracebacks for otherwise unhandled exceptions.
+- Label multilingual and English-only model choices explicitly in Settings and
+  identify the English-only CPU default in first-run status and notification
+  text. Let multilingual Whisper turbo detect each dictation's language instead
+  of forcing its decoder to English; English-only Whisper models still resolve
+  directly to English.
+- Bound Parakeet recordings longer than 60 seconds to overlapping model inputs
+  no longer than 60 seconds, using token timestamps to assign seam text once.
+  Reconcile timestamp subwords with the processor's complete decode so
+  documented TDT timestamp streams that omit word spaces do not reject a
+  valid long multilingual dictation.
+  Benchmark reports expose chunk counts and the longest input without recording
+  audio or transcript content.
+- Add **Test App Compatibility…** to the tray menu so testers can open the
+  privacy-safe repeated target-app protocol without first finding it in the
+  project documentation.
+- Cancel an active Try Dictation capture when its private scratchpad closes,
+  rather than leaving the microphone running after its destination disappears.
+- Keep Try Dictation's command and accessible live status synchronized with
+  recording, cancellation, transcription, model preparation, and delivery
+  recovery, including when a hotkey or recording limit stops it. Give its
+  editor an explicit accessible name and visible scrollbar, and scale its
+  initial size without extending beyond the desktop. Resume Setup's preparation
+  animation when a failed model load is retried.
+- Add **Try Dictation…** beside the hotkey selector in Settings, opening the
+  existing private scratchpad without requiring the notification-area menu.
+  Recording still requires an explicit action in the scratchpad.
+- Keep Setup's final actions in visible left-to-right order during forward and
+  reverse keyboard traversal.
+- Move keyboard focus to a nearby usable control before an asynchronous model
+  retry, microphone check, update download, or readiness change disables the
+  focused command, so keyboard and Narrator navigation never remains stranded
+  on an unavailable action.
+- Keep Settings edits pending while recording, cancellation, transcription or
+  delivery is active. Save and Ctrl+S become available again after the current
+  dictation, preventing one operation from mixing microphone, model, hotkey or
+  text-processing configurations while preserving the user's unsaved choices.
+- Scale the custom **Listening…** and **Transcribing…** indicator text with
+  Windows' independent Accessibility **Text size** setting, including changes
+  made while an indicator is visible, rather than following display DPI alone.
+- Expose the existing **Hold to talk** and **Press to toggle** choices during
+  first-run Setup. The selected style updates the Try Dictation instructions,
+  applies immediately, and remains selected when setup is deferred.
+- Report a locked or unavailable clipboard when Copy Diagnostics cannot write
+  its support summary, rather than losing the tray action's failure without
+  guidance. The error remains free of clipboard-owner details.
+
+Check the intended field before retrying an uncertain paste. Clipboard checks
+cannot acknowledge consumption or eliminate the final check/input race. The
+recovery copy stays in process memory only until explicit Copy, Discard, or
+Exit. Windows is asked not to retain Presspeech writes in Clipboard History or
+Cloud Clipboard, but other software with clipboard access may still observe
+the current item.
+
+After installing this release, you can help verify automatic paste and safe
+recovery in one target app by running the short, privacy-safe [compatibility
+protocol](https://rcourtman.github.io/presspeech/app-compatibility.html).
+Passing reports are useful too; share only aggregate outcomes from blank,
+disposable fields, never dictated text or clipboard contents. Before sharing,
+check the [support guide](https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md)
+for a current reporting route. If issue creation is restricted and no
+comparable open report accepts comments, keep the worksheet draft private and
+retry later.
+
 <a id="windows-0.1.12"></a>
 
 ### Windows 0.1.12 (2026-09-22)

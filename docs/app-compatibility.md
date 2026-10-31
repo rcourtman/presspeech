@@ -31,7 +31,7 @@ Presspeech binds each recording to the window where it began. It should paste
 only when it can still verify that destination. A focus change should avoid
 insertion and leave a route to deliberate manual recovery, but the clipboard
 state is version-specific. macOS and published Windows 0.1.12 normally leave
-the transcript on the clipboard; upcoming Windows 0.1.13 can keep it only in
+the transcript on the clipboard; Windows 0.1.13 and later can keep it only in
 memory until **Delivery Recovery -> Copy for Manual Paste** is chosen. On
 macOS, if Presspeech detects another copy replacing the clipboard during
 delivery, it stops and preserves that newer copy;
@@ -112,7 +112,7 @@ bug reports are not counted as completed protocol evidence.
 3. On macOS 0.3.8 or later, leave **Settings -> Behavior -> Keep Previous
    Clipboard for Manual Restore** off. The automatic timer in legacy 0.3.7 is
    not a comparable baseline. Published Windows 0.1.12 leaves the finished
-   transcript on the current clipboard. Upcoming Windows 0.1.13 can leave the
+   transcript on the current clipboard. Windows 0.1.13 and later can leave the
    previous item unchanged when the target is already known to be invalid; a
    recovery notice does not mean the transcript was copied. Its actual
    dictation clipboard writes ask Windows to exclude them from Clipboard
@@ -176,7 +176,7 @@ For each attempt:
    **Transcript copied, not pasted**, check the clipboard copy in the scratch
    field before manual paste. A notice reflects the copy at completion, not a
    guarantee that a later clipboard change left the transcript current. After
-   upcoming Windows 0.1.13's **Delivery Recovery** notice, do **not** treat the
+   Windows 0.1.13 and later's **Delivery Recovery** notice, do **not** treat the
    current clipboard as the transcript:
    choose **Copy for Manual Paste** explicitly, then paste that copy into the
    scratch field. The previous clipboard item may still be current. On macOS,
@@ -234,7 +234,7 @@ With no intervening clipboard change, the safe result is:
 - no text is inserted into either field;
 - Presspeech shows the version-appropriate recovery notice; and
 - the complete transcript is available for deliberate manual paste. On
-  upcoming Windows 0.1.13, choose **Delivery Recovery -> Copy for Manual
+  Windows 0.1.13 and later, choose **Delivery Recovery -> Copy for Manual
   Paste** before treating the clipboard as the transcript.
 
 Plan three attempts, recording known clipboard-change interruptions
@@ -381,7 +381,7 @@ it in a real field and use the appropriate reporting route when available.
   and report a bug.
 - A normally running Windows app cannot send the paste shortcut into a target
   running as administrator. Published Windows 0.1.12 shows a copied/manual-paste
-  notice; upcoming 0.1.13 offers Delivery Recovery without replacing the
+  notice; 0.1.13 and later offers Delivery Recovery without replacing the
   previous clipboard item. Do not elevate Presspeech as a workaround.
 - Remote-desktop, virtual-machine, terminal-based editor, browser-editor, and
   assistive-technology paths are useful reports only when the field is isolated,

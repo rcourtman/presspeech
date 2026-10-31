@@ -46,7 +46,7 @@
         <span class="section-eyebrow">Install</span>
         <h1>Install Presspeech on macOS</h1>
         <p>Use the direct notarised download for the shortest path, or Homebrew if you want command-line install and updates. The app then guides model loading, macOS privacy grants, and hotkey readiness from Setup Checklist.</p>
-        <p class="quiet" data-release-status>Current published macOS release: 0.3.10. Install metadata updated <time datetime="2026-10-22">22 October 2026</time>.</p>
+        <p class="quiet" data-release-status>Current published macOS release: 0.3.10. Install metadata updated <time datetime="2026-10-31">31 October 2026</time>.</p>
         <div class="note warn" id="model-download-privacy">
           <p class="decision-lead"><strong>Before installing or launching macOS 0.3.8:</strong> decide whether to open it. If a token may be present in the environment that launches Presspeech—or you are unsure—leave 0.3.8 unopened and choose macOS 0.3.9 after reviewing its launch decision. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. If you rely on an inherited proxy whose URL may be malformed, leave 0.3.8 unopened.</p>
           <p><strong>Why:</strong> its model-download requests may include a Hugging Face token inherited by Presspeech. The public model needs no account token. FluidAudio also honors an inherited lowercase <code>https_proxy</code> setting. A TLS-inspecting HTTPS proxy trusted by macOS can read any 0.3.8 token it receives; a tunnelling proxy cannot read the HTTPS request. From 0.3.9, Presspeech removes account-token authentication but still honors proxy settings.</p>
