@@ -27914,7 +27914,7 @@ private enum PresspeechSelfTest {
         )
 
         let processed = processedDictationText(
-            rawTranscript: "  Um, parakeet is fast.  ",
+            rawTranscript: "  Um, parakeet is really fast.  ",
             corrections: [TranscriptCorrection(source: "parakeet", replacement: "Presspeech")],
             spokenFormattingCommands: false,
             dictationLanguage: .english,
@@ -27923,11 +27923,29 @@ private enum PresspeechSelfTest {
         )
         try expect(
             processed,
-            equals: DictationTextProcessingResult(text: "Presspeech is fast.",
+            equals: DictationTextProcessingResult(text: "Presspeech is really fast.",
                                                   appliedCorrectionCount: 1,
                                                   appliedFormattingCommandCount: 0,
                                                   removedFillerWordCount: 1),
             "dictation text processing should trim, apply corrections, then remove fillers"
+        )
+
+        let ambiguousWithEnglishDeclared = processedDictationText(
+            rawTranscript: "Um, parakeet is fast.",
+            corrections: [TranscriptCorrection(source: "parakeet", replacement: "Presspeech")],
+            spokenFormattingCommands: false,
+            dictationLanguage: .english,
+            removeFillerWords: true,
+            englishDictation: true
+        )
+        try expect(
+            ambiguousWithEnglishDeclared,
+            equals: DictationTextProcessingResult(text: "Um, Presspeech is fast.",
+                                                  appliedCorrectionCount: 1,
+                                                  appliedFormattingCommandCount: 0,
+                                                  removedFillerWordCount: 0,
+                                                  keptEnglishOnlyFillerCount: 1),
+            "declared English still preserves an ambiguous filler without an English marker"
         )
 
         let preservedFillers = processedDictationText(
