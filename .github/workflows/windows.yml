@@ -1,6 +1,13 @@
 name: windows
 
 on:
+  workflow_dispatch:
+    inputs:
+      cpu_model_selftest:
+        description: "Run an isolated native CPU model download and decode smoke test"
+        required: false
+        default: false
+        type: boolean
   # Release publication requires a green Windows push run for the exact main
   # commit being approved. Do not path-filter main pushes: otherwise an
   # unrelated docs, benchmark, or macOS change after the last Windows change
@@ -58,16 +65,50 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release runtime does not match its pins' }
       - name: Unit tests
         working-directory: windows
-        # The opted-in native probe replaces the runner clipboard only with
-        # synthetic text and checks the real Win32 privacy marker. Keep this
-        # opt-in scoped to the disposable GitHub-hosted job, not local or
-        # self-hosted test runs.
+        # Native probes use a hidden session window and synthetic clipboard
+        # text. Keep both opt-ins scoped to this disposable hosted job.
         env:
           PRESSPEECH_NATIVE_CLIPBOARD_TEST: "1"
+          PRESSPEECH_NATIVE_SESSION_TEST: "1"
         run: python -m unittest discover -s tests -v
       - name: Compile Python sources
         working-directory: windows
         run: python -m compileall -q app.py benchmark.py british.py config.py engine.py model_cache.py model_network.py text_cleanup.py ui.py updates.py
+      - name: Native CPU model self-test
+        if: github.event_name == 'workflow_dispatch' && inputs.cpu_model_selftest
+        timeout-minutes: 10
+        working-directory: windows
+        env:
+          CUDA_VISIBLE_DEVICES: "-1"
+        run: |
+          # Use an empty profile and cache on the disposable runner. The
+          # existing self-test loads the pinned, verified model, decodes
+          # synthetic silence and unloads; it starts no app, microphone or
+          # hotkey. Routine push/PR checks remain model-free.
+          $qaRoot = Join-Path $env:RUNNER_TEMP 'presspeech-cpu-model-selftest'
+          $env:APPDATA = Join-Path $qaRoot 'roaming'
+          $env:LOCALAPPDATA = Join-Path $qaRoot 'local'
+          $env:HF_HOME = Join-Path $qaRoot 'huggingface'
+          $env:HF_HUB_CACHE = Join-Path $env:HF_HOME 'hub'
+          python -c "import config as cfg; cfg.save(dict(cfg.DEFAULTS, model='base.en', model_explicit=True, check_updates=False))"
+          if ($LASTEXITCODE -ne 0) { throw 'Isolated self-test configuration failed' }
+          python app.py --selftest
+          if ($LASTEXITCODE -ne 0) { throw 'Native CPU model self-test failed' }
+          @'
+          import engine
+          transcriber = engine.Transcriber()
+          try:
+              transcriber.load("base.en", local_only=True)
+              assert transcriber._device == "cpu"
+              # Production warm-up bypasses VAD on its second silent pass,
+              # ensuring the native decoder runs too.
+              transcriber.warmup(seconds=1)
+          finally:
+              transcriber.unload()
+          assert not transcriber.loaded("base.en")
+          print("Native CPU warm-up, cache-only reload and unload passed")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Native CPU warm-up failed' }
       - name: Packaging script safety and syntax
         working-directory: windows
         shell: pwsh

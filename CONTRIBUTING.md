@@ -192,6 +192,20 @@ py -3.12 -m venv .venv
 The unit suite is model-free. The self-test loads the configured model and is
 the native CUDA/ASR gate.
 
+The hosted `windows` workflow also opts into native session-window and
+clipboard probes on its disposable runner. For an isolated CPU model check,
+run it manually with `cpu_model_selftest` enabled:
+
+```sh
+gh workflow run windows.yml --ref main -f cpu_model_selftest=true
+```
+
+That check downloads and verifies the pinned Whisper `base.en` model in a
+temporary profile and cache, runs the app self-test, then exercises native
+decoder warm-up, cache-only reload and unload. It needs access to the public
+model host. It does not qualify CUDA, microphone drivers or physical input;
+routine push and pull-request checks remain model-free.
+
 ## Pull requests
 
 - Keep the diff focused on one change.
