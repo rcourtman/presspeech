@@ -23,6 +23,19 @@ updates:
     # hand and regenerate the locks with windows/release_requirements.py.
     exclude-paths:
       - "**/requirements-cuda*.txt"
+    # Dependabot edits the release lock's pins and hashes but cannot rebuild
+    # its fingerprint header, so every /windows PR fails the lock check. One
+    # weekly PR (plus one for advisories) lists the candidates; the maintainer
+    # regenerates the lock for the accepted ones (see CONTRIBUTING).
+    groups:
+      windows-pip:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      windows-pip-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     open-pull-requests-limit: 5
     labels:
       - dependencies

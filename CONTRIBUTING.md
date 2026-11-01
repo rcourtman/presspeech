@@ -236,14 +236,23 @@ installer, and verifies startup, user-data preservation and uninstall. It
 publishes qualification evidence, without publishing an app release. Use
 `full_package=false` for the transaction matrix alone.
 
-## Hosted macOS release builds
+## Windows dependency updates
 
-For a focused Windows dependency security refresh, use
-`python windows/release_requirements.py --upgrade-package NAME` and repeat
-the option for each reviewed package. Unselected packages remain constrained
-to their existing versions; the resolver verifies compatibility and regenerates
-the hashes. Update the source requirement floors and run the native Windows
-release checks against the resulting lock before publishing.
+Dependabot groups `/windows` pip updates into one weekly PR, with advisory
+fixes in a separate grouped PR. Those PRs always fail the lock check
+(`release lock header, inputs, or resolution fingerprint is stale`):
+Dependabot edits pins and hashes in `windows/requirements-release.txt` but
+cannot regenerate its fingerprint header. Treat the PR as a list of
+candidates. On a branch from `main`, run
+`python windows/release_requirements.py --upgrade-package NAME` (needs `uv`)
+and repeat the option for each update you accept, then close the Dependabot PR
+in favour of yours. Unselected packages remain constrained to their existing
+versions; the resolver verifies compatibility and regenerates the hashes.
+Update the source requirement floors and run the native Windows release checks
+against the resulting lock before publishing. To hold back a version, comment
+`@dependabot ignore NAME major version` (or `minor`) on the grouped PR.
+
+## Hosted macOS release builds
 
 When local resources cannot support compilation, dispatch
 `macos-release-build.yml` on `main` with the intended version and the exact
