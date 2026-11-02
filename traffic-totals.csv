@@ -5,3 +5,6 @@ snapshot_date,repo,metric,count,uniques
 2026-10-26,rcourtman/homebrew-presspeech,clones,32,23
 2026-10-26,rcourtman/presspeech,clones,640,199
 2026-10-26,rcourtman/presspeech,views,65,20
+2026-11-02,rcourtman/homebrew-presspeech,clones,33,22
+2026-11-02,rcourtman/presspeech,clones,736,198
+2026-11-02,rcourtman/presspeech,views,105,42
