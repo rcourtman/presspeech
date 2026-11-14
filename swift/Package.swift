@@ -25,7 +25,7 @@ let package = Package(
         // is always an explicit, reviewable change; Package.resolved records
         // the commit that release resolved to.
         .package(url: "https://github.com/FluidInference/FluidAudio.git",
-                 exact: "0.17.7"),
+                 exact: "0.18.3"),
     ],
     targets: [
         .executableTarget(
