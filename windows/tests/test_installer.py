@@ -15,6 +15,13 @@ class InstallerLifecycleTests(unittest.TestCase):
         self.assertIn("disable_windowed_traceback=True,", spec)
         self.assertNotIn("disable_windowed_traceback=False,", spec)
 
+    def test_package_spec_copies_metadata_for_httpx2_and_httpcore2(self):
+        # huggingface-hub 2.x uses httpx2/httpcore2, both of which call
+        # importlib.metadata.version() at import time without PyInstaller hooks.
+        spec = SPEC.read_text(encoding="utf-8")
+        self.assertIn('"httpx2",', spec)
+        self.assertIn('"httpcore2",', spec)
+
     @staticmethod
     def setup_directives():
         directives = {}

@@ -42,9 +42,14 @@ for package in (
 # not become a first-launch-only ModuleNotFoundError in the frozen app.
 hiddenimports += collect_submodules("transformers.models", on_error="ignore")
 
+# Include distribution metadata for libraries that query importlib.metadata at
+# import time (notably httpx2/httpcore2, which lack PyInstaller hooks) or via
+# runtime dependency checks.
 for distribution in (
     "transformers",
     "huggingface-hub",
+    "httpx2",
+    "httpcore2",
     "hf-xet",
     "tokenizers",
     "safetensors",
