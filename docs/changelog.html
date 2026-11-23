@@ -45,7 +45,7 @@
         <span class="section-eyebrow">Changelog</span>
         <h1>Presspeech changelog</h1>
         <p>Release history for the macOS and Windows apps, newest first. The two apps are released separately and have their own version numbers. Each entry links to its GitHub release, which has the complete notes and downloads.</p>
-        <p>Latest: <a href="#macos-0.3.11">macOS 0.3.11</a> (31 October 2026) and <a href="#windows-0.1.13">Windows 0.1.13</a> (31 October 2026).</p>
+        <p>Latest: <a href="#macos-0.3.11">macOS 0.3.11</a> (31 October 2026) and <a href="#windows-0.1.14">Windows 0.1.14</a> (23 November 2026).</p>
         <div class="actions">
           <a class="button" href="#macos">macOS releases</a>
           <a class="button secondary" href="#windows">Windows releases</a>
@@ -545,6 +545,25 @@ rm -f ~/Library/LaunchAgents/com.local.presspeech.plist</code></pre>
         <div class="wrap">
           <span class="section-eyebrow">Windows</span>
           <h2>Windows releases</h2>
+          <article class="release" id="windows-0.1.14" aria-labelledby="windows-0.1.14-title">
+            <h3 id="windows-0.1.14-title">Windows 0.1.14</h3>
+            <p class="release-meta"><time datetime="2026-11-23">23 November 2026</time> · <a href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.14">GitHub release</a></p>
+            <blockquote><p><strong>Before launching Windows 0.1.14:</strong> Setup asks before the first missing model download and offers deferral; a complete cached model loads without a request. Model downloads use the network. This release disables bundled Hub telemetry and account-token authentication, but configured proxy and CA settings still apply. Review their trust before choosing a download. Dictation audio and transcripts are not sent in model requests. Read the <a href="https://rcourtman.github.io/presspeech/windows.html#model-download-privacy">Windows model-download privacy guide</a> before launching or clearing a working cache.</p></blockquote>
+            <p>This prerelease fixes a toggle-mode modifier-hotkey paste race and refreshes the hash-locked Windows runtime dependencies.</p>
+            <h4>Toggle-mode delivery</h4>
+            <ul>
+              <li>When stopping a recording in <strong>Press to toggle</strong> mode with a modifier hotkey (such as Right Alt), wait up to 500 ms for that hotkey’s own side-specific modifier key to be released before running the held-modifier paste guard.</li>
+              <li>Any unrelated held modifier or focus change still enters Delivery Recovery immediately without overwriting the prior clipboard item, and holding the stop modifier past the 500 ms bound preserves Delivery Recovery. Hold-to-talk behavior is unchanged.</li>
+            </ul>
+            <h4>Runtime dependencies and packaging</h4>
+            <ul>
+              <li>Refresh the hash-locked Windows release dependency graph (<code>huggingface-hub</code> 2.4.0 with <code>httpx2</code> 2.16.2 and <code>httpcore2</code> 2.16.2, <code>transformers</code> 5.24.0, <code>onnxruntime</code> 1.32.0, <code>ctranslate2</code> 4.9.1, <code>pycaw</code> 20260927, <code>comtypes</code> 1.5.0, <code>pyinstaller-hooks-contrib</code> 2026.10, and transitive updates) and bundle <code>httpx2</code> and <code>httpcore2</code> package metadata in the frozen PyInstaller build.</li>
+              <li>Model-download privacy and proxy behavior remain unchanged on <code>httpx2</code>: Hub telemetry and implicit account-token authentication remain disabled before imports, the public Hub endpoint remains fixed, <code>hf-xet</code> (1.8.0) remains bypassed, and configured <code>HTTP_PROXY</code>, <code>HTTPS_PROXY</code>, <code>ALL_PROXY</code>, <code>NO_PROXY</code>, <code>SSL_CERT_FILE</code>, and <code>SSL_CERT_DIR</code> settings (<code>trust_env=True</code>) still apply.</li>
+            </ul>
+            <h4>Validation and remaining coverage</h4>
+            <p>This remains an unsigned prerelease. Hosted qualification covers hash-locked wheel verification, installer transaction and upgrade recovery, repeat installation, installed CPU model loading and decoder warm-up, startup and data preservation, and uninstall. Physical microphone/input, target-app delivery, GPU, sleep/wake, and hardware power-loss testing remain deferred; those paths are not represented as qualified. Audio retention is unchanged.</p>
+            <p>After installing this release, you can help verify automatic paste and safe recovery in one target app by running the short, privacy-safe <a href="https://rcourtman.github.io/presspeech/app-compatibility.html">compatibility protocol</a>. Passing reports are useful too; share only aggregate outcomes from blank, disposable fields, never dictated text or clipboard contents. Before sharing, check the <a href="https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md">support guide</a> for a current reporting route.</p>
+          </article>
           <article class="release" id="windows-0.1.13" aria-labelledby="windows-0.1.13-title">
             <h3 id="windows-0.1.13-title">Windows 0.1.13</h3>
             <p class="release-meta"><time datetime="2026-10-31">31 October 2026</time> · <a href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.13">GitHub release</a></p>

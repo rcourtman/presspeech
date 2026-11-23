@@ -20,14 +20,16 @@ markers. The 0.1.13 candidate disables Hub telemetry before imports and checks
 that the rendered model-request headers contain no agent label; do not
 attribute those controls to 0.1.12.
 
-Both published Windows 0.1.12 and Windows 0.1.13 and later use the pinned
-`huggingface-hub` HTTPX client with its default `trust_env=True`. It honors
+Published Windows 0.1.12 and 0.1.13 use the pinned `huggingface-hub` 1.29.0
+HTTPX 0.28.1 client, while Windows 0.1.14 and later use pinned
+`huggingface-hub` 2.4.0 with `httpx2` 2.16.2; Windows 0.1.13 and later keep the
+client's default `trust_env=True`. It honors
 inherited `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` routing, plus
 `SSL_CERT_FILE` and `SSL_CERT_DIR` CA overrides. These standard proxy and CA
-settings are not cleared in 0.1.13. A proxy that only tunnels HTTPS sees
+settings are not cleared in 0.1.13 or later. A proxy that only tunnels HTTPS sees
 connection metadata, not request contents; a TLS-inspecting HTTPS proxy whose
 CA is trusted by the client can read request headers and any 0.1.12 token they
-carry. The 0.1.13 client disables account-token authentication, but users
+carry. The 0.1.13 and later client disables account-token authentication, but users
 should still trust the proxy and certificate configuration used for model
 downloads.
 
@@ -241,8 +243,8 @@ preparation. Proxy and CA overrides remain active:
 they can observe request metadata or deny service, while altered model bytes are
 rejected by the manifest check.
 
-The pinned hf-xet 1.6.0 source has no verified telemetry opt-out, so Windows
-0.1.13 instead sets `HF_HUB_DISABLE_XET=1` before Hub imports. The packaged-app
+The pinned hf-xet source (1.6.0 in 0.1.12–0.1.13; 1.8.0 in 0.1.14 and later) has no verified telemetry opt-out, so Windows
+0.1.13 and later instead sets `HF_HUB_DISABLE_XET=1` before Hub imports. The packaged-app
 self-test checks the bundled Hub's cached setting and effective Xet availability.
 Hub then uses regular HTTP downloads rather than the hf-xet transfer client. This prevents hf-xet's
 separate transfer-performance telemetry, but model requests remain visible to

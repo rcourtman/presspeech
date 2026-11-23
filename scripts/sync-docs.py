@@ -277,7 +277,7 @@ ANCHORED_INSTALL_PREFLIGHTS = (
         "anchor": "direct-download",
         "platform": "macos",
         "version_key": "version",
-        "reviewed_version": ("0.3.8", "0.3.9", "0.3.10", "0.3.11"),
+        "reviewed_version": ("0.3.8", "0.3.9", "0.3.10", "0.3.11", "0.3.12"),
         "required": (
             "Before opening macOS 0.3.8",
             "missing-model download starts on launch",
@@ -292,9 +292,9 @@ ANCHORED_INSTALL_PREFLIGHTS = (
         "anchor": "download-verify-run",
         "platform": "windows",
         "version_key": "windows_version",
-        "reviewed_version": "0.1.13",
+        "reviewed_version": ("0.1.13", "0.1.14"),
         "required": (
-            "Before launching Windows 0.1.13", "first-run default model download",
+            "Before launching Windows 0.1.14", "first-run default model download",
             "Set Up Later", "account-token authentication and Hub telemetry are disabled",
             "proxy and CA settings still apply", "TLS-inspecting proxy",
             "Launch Presspeech", "unchecked on the final installer screen", "full release-specific warning",
@@ -887,7 +887,7 @@ MAC_MODEL_DOWNLOAD_GUIDANCE = {
 # command before deciding whether to make its model request.
 FIRST_RUN_ACTION_COPY = {
     ROOT / "windows" / "README.md": (
-        "Windows 0.1.13 asks before downloading missing first-run model files",
+        "Windows 0.1.13 and later asks before downloading missing first-run model files",
         "Check Microphone", "off for a new profile", "Press to toggle",
     ),
     DOCS / "getting-started.html": (
@@ -900,7 +900,7 @@ FIRST_RUN_ACTION_COPY = {
         "If you chose to wait after reading the <a href=\"#model-download-privacy\">privacy warning</a>, leave it unopened",
     ),
     DOCS / "windows.html": (
-        "<h2>First launch of Windows 0.1.13</h2>",
+        "<h2>First launch of Windows 0.1.14</h2>",
         "<strong>Set Up Later</strong> defers that request",
         "Changing the selected input does not start capture",
         "A new profile starts with <strong>Start Presspeech with Windows</strong> off",
@@ -916,8 +916,8 @@ FIRST_RUN_ACTION_FORBIDDEN = {
     ROOT / "README.md": (re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),),
     DOCS / "llms-full.txt": (re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),),
     DOCS / "windows.html": (
-        re.compile(r"Windows 0\.1\.13 starts the selected download on first launch without asking"),
-        re.compile(r"A new 0\.1\.13 profile selects startup by default"),
+        re.compile(r"Windows 0\.1\.(?:13|14) starts the selected download on first launch without asking"),
+        re.compile(r"A new 0\.1\.(?:13|14) profile selects startup by default"),
     ),
 }
 
@@ -927,8 +927,8 @@ FIRST_RUN_ACTION_FORBIDDEN = {
 # when release metadata advances so the old steps cannot be published beneath
 # a new version heading.
 ONBOARDING_RELEASE_COPY_REVIEWED: dict[str, str | tuple[str, ...]] = {
-    "version": ("0.3.8", "0.3.9", "0.3.10", "0.3.11"),
-    "windows_version": "0.1.13",
+    "version": ("0.3.8", "0.3.9", "0.3.10", "0.3.11", "0.3.12"),
+    "windows_version": ("0.1.13", "0.1.14"),
 }
 
 COMPATIBILITY_OVERALL_RESULTS = (
@@ -2426,7 +2426,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "HUGGINGFACE_CO_STAGING settings can change its destination, and HF_HUB_USER_AGENT_ORIGIN "
         "is included in request metadata if set; the token may accompany a request to that configured "
         "endpoint. These public models do not need an account token. Windows 0.1.13 and later fixes "
-        "these inherited settings and verify its availability in GitHub Releases. Both published Windows 0.1.12 and Windows 0.1.13 and later use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Windows 0.1.13 and later verifies every allowed required and present optional inference file before model loading: it checks each against its pinned SHA-256 manifest. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. A proxy can still observe request metadata or block a download. Dictation audio "
+        "these inherited settings and verify its availability in GitHub Releases. Published Windows 0.1.12 and 0.1.13 use HTTPX 0.28.1 (with huggingface-hub 1.29.0), while Windows 0.1.14 and later use httpx2 2.16.2 (with huggingface-hub 2.4.0); Windows 0.1.13 and later keep the Hub client's default trust_env=True, so HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR still apply. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Windows 0.1.13 and later verifies every allowed required and present optional inference file before model loading: it checks each against its pinned SHA-256 manifest. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. A proxy can still observe request metadata or block a download. Dictation audio "
         "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
         "itemised (see the privacy inventory)."
     )
@@ -2547,10 +2547,15 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             1,
         )
     privacy_paragraph = text.partition("## Privacy")[2].lstrip().partition("\n\n")[0]
-    if "HTTP_PROXY" not in privacy_paragraph:
-        proxy_summary = (
-            " Both published Windows 0.1.12 and Windows 0.1.13 and later use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents."
-        )
+    stale_proxy_summary = (
+        " Both published Windows 0.1.12 and Windows 0.1.13 and later use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents."
+    )
+    proxy_summary = (
+        " Published Windows 0.1.12 and 0.1.13 use HTTPX 0.28.1 (with huggingface-hub 1.29.0), while Windows 0.1.14 and later use httpx2 2.16.2 (with huggingface-hub 2.4.0); Windows 0.1.13 and later keep the Hub client's default trust_env=True, so HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR still apply. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents."
+    )
+    if stale_proxy_summary in privacy_paragraph:
+        text = text.replace(stale_proxy_summary, proxy_summary, 1)
+    elif "HTTP_PROXY" not in privacy_paragraph:
         marker = "Windows 0.1.13 and later fixes these inherited settings and verify its availability in GitHub Releases."
         if marker in privacy_paragraph:
             text = text.replace(marker, marker + proxy_summary, 1)
@@ -3604,7 +3609,7 @@ def check_anchored_install_preflights(
 def check_macos_upgrade_preflight(
     metadata: dict[str, object],
     page: Path = DOCS / "install.html",
-    reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9", "0.3.10", "0.3.11"),
+    reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9", "0.3.10", "0.3.11", "0.3.12"),
 ) -> list[str]:
     """An upgrade can fetch a missing/invalid model, so deep links need a stop choice."""
     display = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page.name
@@ -4076,8 +4081,8 @@ def check_published_step_scoping(
     """Keep unreleased controls out of the ordered steps for current downloads."""
     errors: list[str] = []
     for path, section_id, future_version in (
-        (mac_path, "direct-download", "0.3.12"),
-        (windows_path, "first-launch", "0.1.14"),
+        (mac_path, "direct-download", "0.3.13"),
+        (windows_path, "first-launch", "0.1.15"),
     ):
         display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
         try:
@@ -6148,7 +6153,7 @@ def run_self_test() -> None:
         ):
             raise SyncError("self-test: generic recovery notice copy promise was accepted")
 
-        preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.13"}
+        preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.14"}
         preflight_surfaces = []
         for surface in ANCHORED_INSTALL_PREFLIGHTS:
             fixture = dict(surface)
@@ -6176,10 +6181,10 @@ def run_self_test() -> None:
                 download = '<a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe">Download</a>'
                 action = ""
                 suffix = (
-                    "<li><strong>Decide whether to launch 0.1.13</strong><p>"
+                    "<li><strong>Decide whether to launch 0.1.14</strong><p>"
                     "If you chose to wait after reading the privacy decision, "
                     "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked "
-                    "and do not open the app. If you choose to use 0.1.13 now, "
+                    "and do not open the app. If you choose to use 0.1.14 now, "
                     "open it from the Start Menu.</p></li>"
                 )
             Path(fixture["path"]).write_text(
@@ -6190,7 +6195,7 @@ def run_self_test() -> None:
         preflight_surfaces = tuple(preflight_surfaces)
         if check_anchored_install_preflights(preflight_metadata, preflight_surfaces):
             raise SyncError("self-test: valid anchored install preflights were rejected")
-        stale_preflight_metadata = dict(preflight_metadata, version="0.3.12")
+        stale_preflight_metadata = dict(preflight_metadata, version="0.3.13")
         if not any(
             "review the macos anchored install preflight" in error
             for error in check_anchored_install_preflights(
@@ -7521,7 +7526,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: contradictory Windows integrity claim was accepted")
 
         readme_preflight = Path(tmp) / "readme-preflight.md"
-        published = {"version": "0.3.9", "windows_version": "0.1.13"}
+        published = {"version": "0.3.9", "windows_version": "0.1.14"}
         safe_readme = read_text(ROOT / "README.md")
         readme_preflight.write_text(safe_readme, encoding="utf-8")
         if check_readme_launch_preflight(published, readme_preflight):
@@ -8456,7 +8461,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: versioned first-run action was rejected")
         if check_onboarding_release_scope({"version": "0.3.8", "windows_version": "0.1.13"}):
             raise SyncError("self-test: reviewed onboarding release scope was rejected")
-        if len(check_onboarding_release_scope({"version": "0.3.12", "windows_version": "0.1.14"})) != 2:
+        if len(check_onboarding_release_scope({"version": "0.3.13", "windows_version": "0.1.15"})) != 2:
             raise SyncError("self-test: onboarding steps were not gated on a new release")
         action_copy.write_text("Windows 0.1.13 and later asks before downloading\n", encoding="utf-8")
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
@@ -8469,13 +8474,13 @@ def run_self_test() -> None:
         )
         scoped_windows.write_text(
             '<section id="first-launch"><ol class="steps"><li>0.1.12</li></ol>'
-            '<details>0.1.14</details></section>',
+            '<details>0.1.15</details></section>',
             encoding="utf-8",
         )
         if check_published_step_scoping(scoped_mac, scoped_windows):
             raise SyncError("self-test: separated future controls were rejected")
         scoped_mac.write_text(
-            '<section id="direct-download"><ol class="steps"><li>0.3.12</li></ol></section>',
+            '<section id="direct-download"><ol class="steps"><li>0.3.13</li></ol></section>',
             encoding="utf-8",
         )
         if not check_published_step_scoping(scoped_mac, scoped_windows):
@@ -8485,7 +8490,7 @@ def run_self_test() -> None:
             encoding="utf-8",
         )
         scoped_windows.write_text(
-            '<section id="first-launch"><ol class="steps"><li>0.1.14</li></ol></section>',
+            '<section id="first-launch"><ol class="steps"><li>0.1.15</li></ol></section>',
             encoding="utf-8",
         )
         if not check_published_step_scoping(scoped_mac, scoped_windows):

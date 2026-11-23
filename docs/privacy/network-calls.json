@@ -17,8 +17,8 @@
       "proxy_preflight_by_release": "In macOS 0.3.8, the pinned FluidAudio client may log a malformed inherited https_proxy or http_proxy URL verbatim, including embedded credentials, and then ignore it. The macOS 0.3.9 implementation refuses to start before model loading when either value lacks a parsable host and port; it reports variable names only. Valid inherited proxy settings remain active, including the TLS-inspection trust boundary",
       "first_run_controls_by_release": [
         {
-          "version": "0.3.10",
-          "status": "historical",
+          "version": "0.3.11",
+          "status": "published",
           "missing_model_controls": [
             {
               "model": "Parakeet TDT v3 CoreML",
@@ -28,8 +28,8 @@
           ]
         },
         {
-          "version": "0.3.11",
-          "status": "published",
+          "version": "0.3.12",
+          "status": "upcoming",
           "missing_model_controls": [
             {
               "model": "Parakeet TDT v3 CoreML",
@@ -63,24 +63,29 @@
         "Hugging Face model-storage and CDN hosts under hf.co",
         "Windows 0.1.12 only: inherited HF_ENDPOINT (if set) or the Hugging Face staging endpoint selected by HUGGINGFACE_CO_STAGING",
         "Windows 0.1.12 only: configured Hub endpoint + /api/agent-harnesses when the local agent-registry cache is missing or stale",
-        "Windows 0.1.12 and 0.1.13: inherited HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, and NO_PROXY settings can route model requests through a configured proxy"
+        "Windows 0.1.12, 0.1.13, and 0.1.14+: inherited HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, and NO_PROXY settings can route model requests through a configured proxy"
       ],
       "purpose": "Download local speech-model weights: multilingual Parakeet TDT v3 when NVIDIA CUDA is usable, or English-only Whisper base.en for the CPU first-run path; other models are user-selectable",
       "approximate_size": "About 2.5 GB for a full Parakeet TDT v3 snapshot (a partial cache may need less) or 141 MiB for Whisper base.en",
       "first_run_controls_by_release": [
         {
-          "version": "0.1.12",
+          "version": "0.1.13",
           "status": "historical",
           "missing_model_controls": [
             {
-              "model": "Selected local model",
-              "trigger": "automatic_on_first_launch",
-              "can_defer": false
+              "model": "Multilingual Parakeet TDT v3",
+              "trigger": "explicit_setup_choice_before_download",
+              "can_defer": true
+            },
+            {
+              "model": "CPU-default Whisper base.en",
+              "trigger": "explicit_setup_choice_before_download",
+              "can_defer": true
             }
           ]
         },
         {
-          "version": "0.1.13",
+          "version": "0.1.14",
           "status": "published",
           "missing_model_controls": [
             {
@@ -96,7 +101,7 @@
           ]
         }
       ],
-      "data_sent": "HTTPS request metadata, selected public model and revision, and bundled library/runtime versions in User-Agent fields; no dictation audio or transcript. Under defaults, Hugging Face observes and can count the model fetch itself. Published Windows 0.1.12 honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, so a configured endpoint or the Hugging Face staging host can change the request destination; an available token may accompany a request to that destination. If HF_HUB_USER_AGENT_ORIGIN is set, the bundled client adds its value to User-Agent metadata. Published Windows 0.1.12 does not disable Hugging Face Hub/Transformers default usage telemetry, which these libraries may send; Transformers also includes a random per-process session identifier in model-request metadata. Exact Hub/Transformers telemetry event fields are defined by the bundled libraries and are not independently enumerated here. In pinned Hub 1.29.0, request-header construction may issue a best-effort GET to the configured endpoint /api/agent-harnesses when its local registry cache is missing or stale; it caches the response locally. Inherited agent-related environment markers may cause an agent/<id> label to be included in model-request User-Agent metadata. Windows 0.1.13 and later disables Hub telemetry before imports and its packaged runtime rejects headers with agent attribution; these controls are not in published 0.1.12. Published Windows 0.1.12 also leaves implicit authentication enabled: if HF_TOKEN or HUGGING_FACE_HUB_TOKEN is available in the environment, or a token is saved in the local Hugging Face cache, a model request may include it. These public models do not require an account token. The release source pins hf-xet 1.6.0, whose upstream source predates the separately documented Xet client-transfer telemetry; 0.1.12 is not claimed to send those Xet reports. Windows 0.1.13 and later forces the public huggingface.co endpoint, clears staging and inherited User-Agent-origin settings, disables Hub telemetry and implicit authentication, explicitly declines account tokens, and replaces Transformers' random request session ID with the fixed non-unique value telemetry-off. It bypasses the separate hf-xet transfer client through a runtime-checked Hub setting, preventing transfer telemetry in versions that implement it while retaining regular HTTP model downloads. These additional controls are not claimed for published 0.1.12. Both published Windows 0.1.12 and Windows 0.1.13 and later use the pinned Hugging Face Hub 1.29.0 HTTPX client (HTTPX 0.28.1) with its default trust_env=True. It honors inherited HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, and NO_PROXY routing, plus SSL_CERT_FILE and SSL_CERT_DIR CA overrides; Windows 0.1.13 and later does not clear these proxy or CA settings. A proxy that only tunnels HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read request headers and any account token sent by published Windows 0.1.12. Windows 0.1.13 and later disables account-token authentication but still uses the configured proxy and CA settings. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Windows 0.1.13 and later verifies every allowed required and present optional inference file against a SHA-256 manifest tied to its pinned repository revision before model loading. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. The proxy can still observe model-request metadata or block a download."
+      "data_sent": "HTTPS request metadata, selected public model and revision, and bundled library/runtime versions in User-Agent fields; no dictation audio or transcript. Under defaults, Hugging Face observes and can count the model fetch itself. Published Windows 0.1.12 honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, so a configured endpoint or the Hugging Face staging host can change the request destination; an available token may accompany a request to that destination. If HF_HUB_USER_AGENT_ORIGIN is set, the bundled client adds its value to User-Agent metadata. Published Windows 0.1.12 does not disable Hugging Face Hub/Transformers default usage telemetry, which these libraries may send; Transformers also includes a random per-process session identifier in model-request metadata. Exact Hub/Transformers telemetry event fields are defined by the bundled libraries and are not independently enumerated here. In pinned Hub 1.29.0, request-header construction may issue a best-effort GET to the configured endpoint /api/agent-harnesses when its local registry cache is missing or stale; it caches the response locally. Inherited agent-related environment markers may cause an agent/<id> label to be included in model-request User-Agent metadata. Windows 0.1.13 and later disables Hub telemetry before imports and its packaged runtime rejects headers with agent attribution; these controls are not in published 0.1.12. Published Windows 0.1.12 also leaves implicit authentication enabled: if HF_TOKEN or HUGGING_FACE_HUB_TOKEN is available in the environment, or a token is saved in the local Hugging Face cache, a model request may include it. These public models do not require an account token. Published Windows 0.1.12 and 0.1.13 pin hf-xet 1.6.0, whose upstream source predates the separately documented Xet client-transfer telemetry; 0.1.12 is not claimed to send those Xet reports. Windows 0.1.14 pins hf-xet 1.8.0 and continues to bypass it. Windows 0.1.13 and later forces the public huggingface.co endpoint, clears staging and inherited User-Agent-origin settings, disables Hub telemetry and implicit authentication, explicitly declines account tokens, and replaces Transformers' random request session ID with the fixed non-unique value telemetry-off. It bypasses the separate hf-xet transfer client through a runtime-checked Hub setting, preventing transfer telemetry in versions that implement it while retaining regular HTTP model downloads. These additional controls are not claimed for published 0.1.12. Published Windows 0.1.12 and 0.1.13 use the pinned Hugging Face Hub 1.29.0 HTTPX client (HTTPX 0.28.1), while Windows 0.1.14 and later use pinned Hugging Face Hub 2.4.0 with httpx2 2.16.2; Windows 0.1.13 and later keep the Hub client's default trust_env=True. It honors inherited HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, and NO_PROXY routing, plus SSL_CERT_FILE and SSL_CERT_DIR CA overrides; Windows 0.1.13 and later does not clear these proxy or CA settings. A proxy that only tunnels HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read request headers and any account token sent by published Windows 0.1.12. Windows 0.1.13 and later disables account-token authentication but still uses the configured proxy and CA settings. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Windows 0.1.13 and later verifies every allowed required and present optional inference file against a SHA-256 manifest tied to its pinned repository revision before model loading. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. The proxy can still observe model-request metadata or block a download."
     },
     {
       "name": "macos_update_check",

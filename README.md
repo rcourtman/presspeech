@@ -59,14 +59,14 @@ better.
 
 ## Install
 
-> Windows 0.1.13 asks before missing first-run model downloads and offers Set Up Later.
+> Windows 0.1.14 asks before missing first-run model downloads and offers Set Up Later.
 >
 > **Before opening a published build:** check [GitHub Releases](https://github.com/rcourtman/presspeech/releases)
 > and the deployed install guide for your platform
 > ([macOS](https://rcourtman.github.io/presspeech/install.html#direct-download) or
 > [Windows](https://rcourtman.github.io/presspeech/windows.html#download-verify-run))
 > for the exact version; the source branch can contain an unreleased candidate.
-> A clean installation of macOS 0.3.9, macOS 0.3.10 or macOS 0.3.11
+> A clean installation of macOS 0.3.9, macOS 0.3.10, macOS 0.3.11 or macOS 0.3.12
 > asks before its first speech-model download. Existing installations retain
 > automatic startup, so a missing model may still download on launch.
 > On Windows 0.1.12, a missing speech-model download starts on launch and may

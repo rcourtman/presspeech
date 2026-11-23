@@ -3,7 +3,7 @@
 Fast, private, local push-to-talk dictation for Windows — a Windows port of
 [presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
 speak, and release. Presspeech normally pastes into the original window when
-it can verify that destination; otherwise Windows 0.1.13 retains it in Delivery Recovery for explicit Copy or Discard. A move to another field or browser tab in
+it can verify that destination; otherwise Windows 0.1.13 and later retains it in Delivery Recovery for explicit Copy or Discard. A move to another field or browser tab in
 the same window may go undetected, so keep the starting field and tab selected
 until insertion or recovery. Speech recognition runs on your machine; Presspeech
 has no account or cloud transcription service.
@@ -34,7 +34,7 @@ token or custom route may be configured, or are unsure, choose 0.1.13 or later b
 launching 0.1.12. Installing the package alone does not start
 the model request; keep the app unopened if you choose to wait.
 
-Both published Windows 0.1.12 and Windows 0.1.13 and later use pinned `huggingface-hub` 1.29.0 and HTTPX 0.28.1 with the default `trust_env=True`: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` affect proxy routing; `SSL_CERT_FILE` and `SSL_CERT_DIR` change TLS CA roots. 0.1.13 and later still honors these proxy and CA settings. A proxy that only tunnels HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives; 0.1.13 and later disables account-token authentication. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use.
+Published Windows 0.1.12 and 0.1.13 use pinned `huggingface-hub` 1.29.0 and HTTPX 0.28.1, while Windows 0.1.14 and later use pinned `huggingface-hub` 2.4.0 and `httpx2` 2.16.2; Windows 0.1.13 and later keep the default `trust_env=True`: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` affect proxy routing; `SSL_CERT_FILE` and `SSL_CERT_DIR` change TLS CA roots. 0.1.13 and later still honors these proxy and CA settings. A proxy that only tunnels HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives; 0.1.13 and later disables account-token authentication. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use.
 
 Already used Windows 0.1.12? If you ran a model download with a token available
 and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
@@ -57,9 +57,9 @@ when that English-only model is already installed. It does not download an
 alternate model automatically; a missing fallback leaves the dictation
 undelivered and asks you to retry or choose a model in Settings.
 
-## First-run controls in 0.1.13
+## First-run controls in 0.1.13 and later
 
-Windows 0.1.13 asks before downloading missing first-run model files. Choose the
+Windows 0.1.13 and later asks before downloading missing first-run model files. Choose the
 offered download or Set Up Later; a complete cached model loads without a
 network request. Check Microphone explicitly opens the selected input for a
 short local level test; changing the selection alone does not start capture.
@@ -133,7 +133,7 @@ disables the hf-xet transfer client, disables implicit authentication and
 inherited endpoint/staging/User-Agent-origin settings, and prevents
 Transformers from adding a random per-launch session identifier. The packaged
 runtime also verifies that rendered Hub headers contain no agent-attribution
-label. The pinned `hf-xet` 1.6.0 build has no verified telemetry opt-out, so
+label. The pinned `hf-xet` build (1.6.0 in 0.1.12–0.1.13; 1.8.0 in 0.1.14 and later) has no verified telemetry opt-out, so
 Presspeech sets `HF_HUB_DISABLE_XET=1` before imports and checks the bundled Hub's cached
 setting and effective Xet availability in the packaged runtime. Hub falls back
 to regular HTTP downloads; Hugging Face still observes the model request. Every model
@@ -754,7 +754,7 @@ $env:PIP_CONFIG_FILE = 'NUL'
 .\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes -r requirements-cuda-release.txt
 .\.release-venv\Scripts\python -m pip check
 powershell -ExecutionPolicy Bypass -File .\build-release.ps1 `
-  -Version 0.1.13 -Python .\.release-venv\Scripts\python.exe
+  -Version 0.1.14 -Python .\.release-venv\Scripts\python.exe
 ```
 
 For source builds containing this hash lock, `requirements-release.txt` lists

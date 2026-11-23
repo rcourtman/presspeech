@@ -4,12 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Presspeech for Windows - Private Local Dictation</title>
-    <meta name="description" content="Before opening Windows 0.1.13, read the model-download privacy decision: at first launch Setup asks before missing model downloads, telemetry and account tokens are disabled, and configured proxy and CA settings still apply.">
+    <meta name="description" content="Before opening Windows 0.1.14, read the model-download privacy decision: at first launch Setup asks before missing model downloads, telemetry and account tokens are disabled, and configured proxy and CA settings still apply.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/windows.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
     <meta property="og:title" content="Presspeech for Windows - Private Local Dictation">
-    <meta property="og:description" content="Before opening Windows 0.1.13, read the model-download privacy decision: at first launch Setup asks before missing model downloads, telemetry and account tokens are disabled, and configured proxy and CA settings still apply.">
+    <meta property="og:description" content="Before opening Windows 0.1.14, read the model-download privacy decision: at first launch Setup asks before missing model downloads, telemetry and account tokens are disabled, and configured proxy and CA settings still apply.">
     <meta property="og:url" content="https://rcourtman.github.io/presspeech/windows.html">
     <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:image:type" content="image/png">
@@ -30,19 +30,19 @@
             "@type": "WebPage",
             "@id": "https://rcourtman.github.io/presspeech/windows.html#webpage",
             "url": "https://rcourtman.github.io/presspeech/windows.html",
-            "dateModified": "2026-10-31",
+            "dateModified": "2026-11-23",
             "mainEntity": "https://rcourtman.github.io/presspeech/windows.html#software"
           },
           {
             "@type": "SoftwareApplication",
             "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
             "name": "Presspeech for Windows",
-            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech checks the original destination window before automatic paste, but a field or browser tab change in the same window may not be detected. Windows 0.1.13 offers Delivery Recovery when automatic paste is unsafe or uncertain; inspect the intended field before choosing an explicit recovery action. Copy to the clipboard for manual paste only when appropriate; a later copy can replace it. First-run Setup asks before downloading missing speech models. Model requests use the network with inherited account authentication and telemetry disabled; configured proxies and CA settings still apply. Dictation audio and transcripts remain local.",
+            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech checks the original destination window before automatic paste, but a field or browser tab change in the same window may not be detected. Windows 0.1.13 and later offers Delivery Recovery when automatic paste is unsafe or uncertain; inspect the intended field before choosing an explicit recovery action. Copy to the clipboard for manual paste only when appropriate; a later copy can replace it. First-run Setup asks before downloading missing speech models. Model requests use the network with inherited account authentication and telemetry disabled; configured proxies and CA settings still apply. Dictation audio and transcripts remain local.",
             "operatingSystem": "Windows 11 x64 recommended; Windows 10 x64 only while the specific edition remains supported or is enrolled in applicable Extended Security Updates",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "Speech recognition, dictation, transcription",
-            "softwareVersion": "0.1.13",
-            "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.13",
+            "softwareVersion": "0.1.14",
+            "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.14",
             "installUrl": "https://rcourtman.github.io/presspeech/windows.html",
             "codeRepository": "https://github.com/rcourtman/presspeech/tree/main/windows",
             "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
@@ -94,11 +94,11 @@
           <p id="windows-0-1-12-after-use"><strong>Already used Windows 0.1.12?</strong> If a model download ran with a token available and an inherited <code>HF_ENDPOINT</code> or staging setting may have sent it to a destination you do not trust—or an untrusted TLS-inspecting HTTPS proxy could read the request—treat the token as disclosed to that destination or proxy. A proxy that only tunnels HTTPS cannot read the token. <a href="https://huggingface.co/settings/token">Revoke the token and create a replacement at Hugging Face Access Tokens</a>; do not include token values in logs or support requests.</p>
           <details>
             <summary>Technical details of Windows 0.1.12 model downloads</summary>
-            <p><strong>Privacy for published Windows 0.1.12:</strong> Hugging Face libraries’ default usage telemetry and implicit authentication remain enabled during model downloads. The libraries may send usage data to Hugging Face, and model-request metadata includes a random per-process session ID. Its pinned Hub 1.29.0 client may fetch <code>/api/agent-harnesses</code> when its local registry cache is missing or stale, and inherited agent-related environment markers may add an <code>agent/&lt;id&gt;</code> label to model-request metadata. An available <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or token in the local Hugging Face cache may accompany a model request. This build also honors inherited <code>HF_ENDPOINT</code> and <code>HUGGINGFACE_CO_STAGING</code> settings, which can change the request destination; an available token may therefore go to that configured endpoint. If <code>HF_HUB_USER_AGENT_ORIGIN</code> is set, its value is added to request metadata. These models do not require an account token. 0.1.13 and later fixes those inherited settings, disables Hub telemetry before imports, and checks that rendered headers contain no agent label; verify availability in GitHub Releases. Both published Windows 0.1.12 and Windows 0.1.13 and later use HTTPX 0.28.1 with the Hub client's default <code>trust_env=True</code>; it honors <code>HTTP_PROXY</code>, <code>HTTPS_PROXY</code>, <code>ALL_PROXY</code>, <code>NO_PROXY</code>, <code>SSL_CERT_FILE</code>, and <code>SSL_CERT_DIR</code>. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read request headers and any 0.1.12 token; a tunnelling proxy sees connection metadata, not request contents. 0.1.13 and later still honors these proxy and CA settings. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Windows 0.1.13 and later verifies every allowed required and present optional inference file before model loading by checking it against its pinned SHA-256 manifest. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. The proxy can still observe request metadata or block a download. Dictation audio and transcripts are not sent in model downloads; the exact telemetry fields are not independently itemised.</p>
+            <p><strong>Privacy for published Windows 0.1.12:</strong> Hugging Face libraries’ default usage telemetry and implicit authentication remain enabled during model downloads. The libraries may send usage data to Hugging Face, and model-request metadata includes a random per-process session ID. Its pinned Hub 1.29.0 client may fetch <code>/api/agent-harnesses</code> when its local registry cache is missing or stale, and inherited agent-related environment markers may add an <code>agent/&lt;id&gt;</code> label to model-request metadata. An available <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or token in the local Hugging Face cache may accompany a model request. This build also honors inherited <code>HF_ENDPOINT</code> and <code>HUGGINGFACE_CO_STAGING</code> settings, which can change the request destination; an available token may therefore go to that configured endpoint. If <code>HF_HUB_USER_AGENT_ORIGIN</code> is set, its value is added to request metadata. These models do not require an account token. 0.1.13 and later fixes those inherited settings, disables Hub telemetry before imports, and checks that rendered headers contain no agent label; verify availability in GitHub Releases. Published Windows 0.1.12 and 0.1.13 use HTTPX 0.28.1 (with Hub 1.29.0), while Windows 0.1.14 and later use <code>httpx2</code> 2.16.2 (with Hub 2.4.0); Windows 0.1.13 and later keep the Hub client's default <code>trust_env=True</code>, so <code>HTTP_PROXY</code>, <code>HTTPS_PROXY</code>, <code>ALL_PROXY</code>, <code>NO_PROXY</code>, <code>SSL_CERT_FILE</code>, and <code>SSL_CERT_DIR</code> still apply. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read request headers and any 0.1.12 token; a tunnelling proxy sees connection metadata, not request contents. 0.1.13 and later still honors these proxy and CA settings. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Windows 0.1.13 and later verifies every allowed required and present optional inference file before model loading by checking it against its pinned SHA-256 manifest. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. The proxy can still observe request metadata or block a download. Dictation audio and transcripts are not sent in model downloads; the exact telemetry fields are not independently itemised.</p>
           </details>
           <p>See the <a href="privacy.html#network-calls">version-specific network-call inventory</a>.</p>
         </div>
-        <p class="quiet" data-release-status>Current published Windows prerelease: 0.1.13. Install metadata updated <time datetime="2026-10-31">31 October 2026</time>.</p>
+        <p class="quiet" data-release-status>Current published Windows prerelease: 0.1.14. Install metadata updated <time datetime="2026-11-23">23 November 2026</time>.</p>
         <div class="note">
           <p><strong>Check your language before downloading.</strong> Fresh systems with usable NVIDIA CUDA select multilingual Parakeet (~2.5 GB). Without usable CUDA, the fresh CPU default is English-only Whisper base.en (~141 MiB). Published 0.1.12 starts the selected download on first launch; it has no pre-download deferral. Only 0.1.13 and later asks before fetching either missing first-run default model and offers <strong>Set Up Later</strong> to defer; its Parakeet path also offers the smaller CPU model. Other local models remain selectable in Settings. <a href="#language-support">Compare the two first-run paths</a>.</p>
         </div>
@@ -107,7 +107,7 @@
         </div>
         <div class="actions">
           <a class="button" href="#download-verify-run">Review requirements and download</a>
-          <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.13">Release notes and checksum</a>
+          <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.14">Release notes and checksum</a>
           <a class="button secondary" href="getting-started.html">First dictation guide</a>
           <a class="button secondary" href="#assistant-install">Install with an assistant</a>
         </div>
@@ -118,7 +118,7 @@
           <span class="section-eyebrow">Before you download</span>
           <h2 id="language-support">Requirements, language, and download size</h2>
           <div class="note warn" data-install-preflight="windows">
-            <p><strong>Before launching Windows 0.1.13:</strong> Setup asks before either missing first-run default model download and offers <strong>Set Up Later</strong>. A complete cached model loads without a transfer. Public model account-token authentication and Hub telemetry are disabled; configured proxy and CA settings still apply. Review the trust of a TLS-inspecting proxy before downloading. Downloading or installing without opening the app does not make a model request. If you want to wait, leave <strong>Launch Presspeech</strong> unchecked on the final installer screen. Read the <a href="#model-download-privacy">full release-specific warning</a>, including the historical 0.1.12 guidance, before deciding.</p>
+            <p><strong>Before launching Windows 0.1.14:</strong> Setup asks before either missing first-run default model download and offers <strong>Set Up Later</strong>. A complete cached model loads without a transfer. Public model account-token authentication and Hub telemetry are disabled; configured proxy and CA settings still apply. Review the trust of a TLS-inspecting proxy before downloading. Downloading or installing without opening the app does not make a model request. If you want to wait, leave <strong>Launch Presspeech</strong> unchecked on the final installer screen. Read the <a href="#model-download-privacy">full release-specific warning</a>, including the historical 0.1.12 guidance, before deciding.</p>
           </div>
           <div class="facts">
             <div class="fact"><strong>Windows 11</strong><span>A 64-bit x64 PC. Windows 10 remains compatible but needs Extended Security Updates or an edition that remains supported; Windows on Arm is not supported.</span></div>
@@ -137,12 +137,12 @@
           <ol class="steps">
             <li>
               <strong>Download the current installer and checksum</strong>
-              <p>Get <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.13/Presspeech-Setup-0.1.13-x64.exe">Presspeech-Setup-0.1.13-x64.exe</a> and its <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.13/Presspeech-Setup-0.1.13-x64.exe.sha256">published SHA-256 file</a> from the same GitHub release.</p>
+              <p>Get <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.14/Presspeech-Setup-0.1.14-x64.exe">Presspeech-Setup-0.1.14-x64.exe</a> and its <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.14/Presspeech-Setup-0.1.14-x64.exe.sha256">published SHA-256 file</a> from the same GitHub release.</p>
             </li>
             <li>
               <strong>Verify SHA-256 automatically</strong>
               <p>In PowerShell, run the commands below from your Downloads folder. They validate the checksum file, compare it with the installer, and stop with an error instead of reporting success if anything differs. This confirms the installer matches the checksum published alongside it; because both files come from the same release, the checksum alone does not independently authenticate the publisher or make an unsigned installer trusted. If you cannot decide to trust this release, stop here.</p>
-              <pre><code>$installer = '.\Presspeech-Setup-0.1.13-x64.exe'
+              <pre><code>$installer = '.\Presspeech-Setup-0.1.14-x64.exe'
 $parts = (Get-Content -LiteralPath "$installer.sha256" -Raw).Trim() -split '\s+'
 if ($parts.Count -ne 2 -or
     $parts[0] -notmatch '^[0-9a-fA-F]{64}$' -or
@@ -159,9 +159,9 @@ if ($actual -ne $parts[0]) {
               <strong>Optionally verify the immutable release attestation</strong>
               <p>If you already use an authenticated <a href="https://cli.github.com/">GitHub CLI</a>, these commands additionally check that GitHub considers the release immutable and that your local installer matches its signed release attestation:</p>
               <pre><code>$ErrorActionPreference = 'Stop'
-gh release verify windows-v0.1.13 --repo rcourtman/presspeech
+gh release verify windows-v0.1.14 --repo rcourtman/presspeech
 if ($LASTEXITCODE -ne 0) { throw 'Release attestation failed; do not run the installer.' }
-gh release verify-asset windows-v0.1.13 $installer --repo rcourtman/presspeech
+gh release verify-asset windows-v0.1.14 $installer --repo rcourtman/presspeech
 if ($LASTEXITCODE -ne 0) { throw 'Installer attestation failed; do not run the installer.' }
 'Release and installer attestations verified.'</code></pre>
               <p>The success line appears only if both commands succeed. If either fails, stop: do not treat the installer as attested or run it until you resolve the failure. This provides stronger provenance evidence than the checksum file hosted beside it, but does not code-sign the installer or override Windows security policy.</p>
@@ -171,8 +171,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Installer attestation failed; do not run the i
               <p>The current build is unsigned. If Microsoft Defender SmartScreen shows <strong>Windows protected your PC</strong>, confirm the filename and verified hash before choosing <strong>More info → Run anyway</strong>. That choice applies to a SmartScreen reputation warning, not a Smart App Control block: <a href="https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions">Smart App Control has no per-app exception</a>. If Smart App Control or your administrator blocks the installer, stop; do not disable protection or work around the block.</p>
             </li>
             <li>
-              <strong>Decide whether to launch 0.1.13</strong>
-              <p>If you chose to wait, leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app. It starts checked by default: clear it before choosing Finish. If you choose to use 0.1.13 now, launch after reviewing the model-download decision; Setup asks before missing first-run model files are downloaded. A complete cached model loads without another request. Review microphone access before choosing Check Microphone.</p>
+              <strong>Decide whether to launch 0.1.14</strong>
+              <p>If you chose to wait, leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app. It starts checked by default: clear it before choosing Finish. If you choose to use 0.1.14 now, launch after reviewing the model-download decision; Setup asks before missing first-run model files are downloaded. A complete cached model loads without another request. Review microphone access before choosing Check Microphone.</p>
             </li>
           </ol>
           <p class="quiet">Why the warning? <a href="https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation">Microsoft explains that unsigned downloads start without publisher reputation</a>; each new unsigned version may prompt again.</p>
@@ -265,8 +265,8 @@ Native qualification limits: Windows remains a prerelease. Physical microphone/i
       <section id="first-launch">
         <div class="wrap">
           <span class="section-eyebrow">First launch</span>
-          <h2>First launch of Windows 0.1.13</h2>
-          <p>Read the <a href="#model-download-privacy">model-download privacy decision</a> before opening the app. Windows 0.1.13 asks before downloading missing first-run model files; <strong>Set Up Later</strong> defers that request. A complete cached model loads without a network transfer.</p>
+          <h2>First launch of Windows 0.1.14</h2>
+          <p>Read the <a href="#model-download-privacy">model-download privacy decision</a> before opening the app. Windows 0.1.14 asks before downloading missing first-run model files; <strong>Set Up Later</strong> defers that request. A complete cached model loads without a network transfer.</p>
           <ol class="steps">
             <li><strong>Choose model preparation or defer</strong><p>With usable NVIDIA CUDA, the fresh default is multilingual Parakeet (~2.5 GB); otherwise it is English-only Whisper base.en on CPU (~141 MiB). Review the size and language before choosing the offered download. The Parakeet path also offers the smaller CPU model. Other models remain in Settings. Local cache checking, download, loading and warm-up have separate statuses.</p></li>
             <li><strong>Choose input and dictation style</strong><p>Select the microphone and hotkey. Choose <strong>Hold to talk</strong> or <strong>Press to toggle</strong> in Setup. Right Alt is the default; use F8 or another key if Right Alt acts as AltGr. <strong>Start Presspeech with Windows</strong> is off for a new profile; existing saved choices are retained. Review that choice before finishing or deferring Setup.</p></li>

@@ -2544,7 +2544,7 @@ func audioObjectStringProperty(_ objectID: AudioObjectID,
     var size = UInt32(MemoryLayout<UnsafeRawPointer?>.size)
     let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &rawValue)
     guard status == noErr, let rawValue else { return nil }
-    let string = Unmanaged<CFString>.fromOpaque(rawValue).takeUnretainedValue() as String
+    let string = Unmanaged<CFString>.fromOpaque(rawValue).takeRetainedValue() as String
     return string.isEmpty ? nil : string
 }
 
