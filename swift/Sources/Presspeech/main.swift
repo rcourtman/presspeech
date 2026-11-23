@@ -511,6 +511,14 @@ struct HotkeyChoice: Equatable {
         keycode == other.keycode && requiredModifiers == other.requiredModifiers
             && isModifier == other.isModifier && modifierFlag == other.modifierFlag
     }
+
+    /// Modifier flags physically held while pressing this hotkey.
+    /// Empty for plain function keys.
+    var heldModifierFlags: CGEventFlags {
+        var flags = requiredModifiers
+        if let modifierFlag { flags.insert(modifierFlag) }
+        return flags
+    }
 }
 
 let RIGHT_MODIFIER_HOTKEY_CHOICES: [HotkeyChoice] = [
@@ -5126,6 +5134,18 @@ private struct HotkeyTransitionState {
     }
 }
 
+/// Modifier flags that may still be physically held immediately after a hotkey
+/// triggers a stop. Only toggle-mode stops fire on key-down while the user's
+/// finger is still lifting off the hotkey; hold-mode stops fire on key-up.
+private func pendingToggleStopModifierFlags(
+    for hotkey: HotkeyChoice,
+    triggerMode: TriggerMode,
+    actions: [HotkeyTransitionAction]
+) -> CGEventFlags {
+    guard triggerMode == .toggle, actions.contains(.release) else { return [] }
+    return hotkey.heldModifierFlags
+}
+
 @MainActor
 final class HotkeyListener {
 
@@ -5155,7 +5175,7 @@ final class HotkeyListener {
     /// onCancel fires for Escape while a recording is active.
     /// The receipt is nil only when no press event started it.
     var onPress: ((HotkeyPressReceipt?) -> Void)?
-    var onRelease: (() -> Void)?
+    var onRelease: ((CGEventFlags) -> Void)?
     var onCancel: (() -> Void)?
     var onTapInterrupted: (() -> Void)?
     var isRecordingActive: (() -> Bool)?
@@ -5348,7 +5368,14 @@ final class HotkeyListener {
                                      timebaseNumer: Self.timebase.numer,
                                      timebaseDenom: Self.timebase.denom))
             : nil
-        dispatchHotkeyActions(result.actions, pressReceipt: receipt)
+        let pendingToggleStopModifiers = pendingToggleStopModifierFlags(
+            for: hotkey,
+            triggerMode: triggerMode,
+            actions: result.actions
+        )
+        dispatchHotkeyActions(result.actions,
+                              pressReceipt: receipt,
+                              pendingToggleStopModifiers: pendingToggleStopModifiers)
         return result.suppress
     }
 
@@ -5359,23 +5386,30 @@ final class HotkeyListener {
     }()
 
     private func dispatchHotkeyActions(_ actions: [HotkeyTransitionAction],
-                                       pressReceipt: HotkeyPressReceipt? = nil) {
+                                       pressReceipt: HotkeyPressReceipt? = nil,
+                                       pendingToggleStopModifiers: CGEventFlags = []) {
         guard !actions.isEmpty else { return }
         let generation = actionGeneration
+        let pendingToggleStopModifiersRaw = pendingToggleStopModifiers.rawValue
 
         Task { @MainActor [weak self] in
             guard let self, self.actionGeneration == generation else { return }
-            self.performHotkeyActions(actions, pressReceipt: pressReceipt)
+            self.performHotkeyActions(
+                actions,
+                pressReceipt: pressReceipt,
+                pendingToggleStopModifiers: CGEventFlags(rawValue: pendingToggleStopModifiersRaw)
+            )
             if actions.contains(.tapInterrupted) { self.tapInterruptionPending = false }
         }
     }
 
     private func performHotkeyActions(_ actions: [HotkeyTransitionAction],
-                                      pressReceipt: HotkeyPressReceipt?) {
+                                      pressReceipt: HotkeyPressReceipt?,
+                                      pendingToggleStopModifiers: CGEventFlags) {
         for action in actions {
             switch action {
             case .press: onPress?(pressReceipt)
-            case .release: onRelease?()
+            case .release: onRelease?(pendingToggleStopModifiers)
             case .cancel: onCancel?()
             case .tapInterrupted: onTapInterrupted?()
             }
@@ -8004,6 +8038,12 @@ private struct KeyboardEventStep: Equatable {
     let flags: CGEventFlags
 }
 
+private let SYNTHETIC_TEXT_DELIVERY_FORBIDDEN_MODIFIERS: CGEventFlags = [
+    .maskShift, .maskControl, .maskAlternate, .maskCommand, .maskSecondaryFn,
+]
+private let TOGGLE_STOP_MODIFIER_RELEASE_WAIT_MAX_SECONDS: TimeInterval = 0.5
+private let TOGGLE_STOP_MODIFIER_RELEASE_POLL_SECONDS: TimeInterval = 0.01
+
 /// A physically held modifier can turn our Paste chord into a different app
 /// shortcut. Query HID state rather than the combined session state to avoid
 /// unrelated session-posted keys. Once our Command-down is posted, its state
@@ -8012,8 +8052,7 @@ private struct KeyboardEventStep: Equatable {
 /// HID transaction; native held-key qualification remains necessary.
 private func modifiersAllowSyntheticTextDelivery(_ flags: CGEventFlags,
                                                  syntheticCommandDown: Bool) -> Bool {
-    let relevant: CGEventFlags = [.maskShift, .maskControl, .maskAlternate,
-                                  .maskCommand, .maskSecondaryFn]
+    let relevant = SYNTHETIC_TEXT_DELIVERY_FORBIDDEN_MODIFIERS
     let forbidden = syntheticCommandDown ? relevant.subtracting(.maskCommand) : relevant
     return flags.intersection(forbidden).isEmpty
 }
@@ -8021,6 +8060,93 @@ private func modifiersAllowSyntheticTextDelivery(_ flags: CGEventFlags,
 private func physicalModifiersAllowSyntheticTextDelivery(syntheticCommandDown: Bool = false) -> Bool {
     modifiersAllowSyntheticTextDelivery(CGEventSource.flagsState(.hidSystemState),
                                         syntheticCommandDown: syntheticCommandDown)
+}
+
+private enum ToggleStopModifierWaitStatus: Equatable, Sendable {
+    /// All relevant physical modifiers are clear.
+    case clear
+    /// Only modifier(s) belonging to the toggle-stop hotkey are still held.
+    case waitingForToggleStopRelease
+    /// An unrelated physical modifier is held, or no toggle-stop modifiers are expected.
+    case unrelatedModifierHeld
+}
+
+private func toggleStopModifierWaitStatus(
+    flags: CGEventFlags,
+    expectedToggleStopModifiers: CGEventFlags
+) -> ToggleStopModifierWaitStatus {
+    let held = flags.intersection(SYNTHETIC_TEXT_DELIVERY_FORBIDDEN_MODIFIERS)
+    if held.isEmpty { return .clear }
+    let expected = expectedToggleStopModifiers.intersection(SYNTHETIC_TEXT_DELIVERY_FORBIDDEN_MODIFIERS)
+    guard !expected.isEmpty, held.subtracting(expected).isEmpty else {
+        return .unrelatedModifierHeld
+    }
+    return .waitingForToggleStopRelease
+}
+
+private enum ToggleStopModifierWaitOutcome: Equatable, Sendable {
+    case notNeeded
+    case released(waitedSeconds: TimeInterval)
+    case unrelatedModifierHeld
+    case timedOut(waitedSeconds: TimeInterval)
+    case aborted
+}
+
+/// In toggle mode with a modifier hotkey (or modifier combination), the stop
+/// press emits `.release` on key-down while the user's finger is still lifting
+/// off the key. For fast transcriptions, wait in a bounded, non-blocking way
+/// for ONLY the toggle-stop hotkey's modifier(s) to clear before running the
+/// physical-modifier delivery guard. Unrelated modifiers stop waiting
+/// immediately so we fail closed into clipboard-only recovery.
+@MainActor
+private func waitForToggleStopModifierRelease(
+    expectedToggleStopModifiers: CGEventFlags,
+    maxWaitSeconds: TimeInterval = TOGGLE_STOP_MODIFIER_RELEASE_WAIT_MAX_SECONDS,
+    pollIntervalSeconds: TimeInterval = TOGGLE_STOP_MODIFIER_RELEASE_POLL_SECONDS,
+    currentFlags: () -> CGEventFlags = { CGEventSource.flagsState(.hidSystemState) },
+    now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+    shouldContinue: () -> Bool = { true },
+    sleep: (TimeInterval) async -> Void = { seconds in
+        let nanos = UInt64(max(0, seconds) * 1_000_000_000)
+        try? await Task.sleep(nanoseconds: nanos)
+    }
+) async -> ToggleStopModifierWaitOutcome {
+    let expected = expectedToggleStopModifiers.intersection(SYNTHETIC_TEXT_DELIVERY_FORBIDDEN_MODIFIERS)
+    guard !expected.isEmpty else { return .notNeeded }
+    guard shouldContinue() else { return .aborted }
+
+    switch toggleStopModifierWaitStatus(flags: currentFlags(),
+                                        expectedToggleStopModifiers: expected) {
+    case .clear:
+        return .notNeeded
+    case .unrelatedModifierHeld:
+        return .unrelatedModifierHeld
+    case .waitingForToggleStopRelease:
+        break
+    }
+
+    let startedAt = now()
+    while true {
+        let elapsed = max(0, now() - startedAt)
+        let remaining = maxWaitSeconds - elapsed
+        if remaining <= 0 {
+            return .timedOut(waitedSeconds: elapsed)
+        }
+        await sleep(min(pollIntervalSeconds, remaining))
+        guard shouldContinue() else { return .aborted }
+        let afterSleepElapsed = max(0, now() - startedAt)
+        switch toggleStopModifierWaitStatus(flags: currentFlags(),
+                                            expectedToggleStopModifiers: expected) {
+        case .clear:
+            return .released(waitedSeconds: afterSleepElapsed)
+        case .unrelatedModifierHeld:
+            return .unrelatedModifierHeld
+        case .waitingForToggleStopRelease:
+            if afterSleepElapsed >= maxWaitSeconds {
+                return .timedOut(waitedSeconds: afterSleepElapsed)
+            }
+        }
+    }
 }
 
 private let ANSI_PASTE_VIRTUAL_KEY: CGKeyCode = 0x09
@@ -11139,6 +11265,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var isBusy = false
     private var recordingPasteTarget: DictationPasteTarget?
     private var recordingPermissionInterruptionObserved = false
+    private var recordingToggleStopModifiers: CGEventFlags = []
     private var isReady = false
     private var isCoreRuntimeReady = false
     private var isSpeechModelReady = false
@@ -11312,7 +11439,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
 
         hotkey.onPress = { [weak self] receipt in self?.handleHotkeyPress(receipt: receipt) }
-        hotkey.onRelease = { [weak self] in self?.handleRelease() }
+        hotkey.onRelease = { [weak self] pendingToggleStopModifiers in
+            self?.handleRelease(pendingToggleStopModifiers: pendingToggleStopModifiers)
+        }
         hotkey.onCancel = { [weak self] in self?.cancelActiveRecording(reason: "escape") }
         hotkey.onTapInterrupted = { [weak self] in self?.handleHotkeyTapInterruption() }
         hotkey.isRecordingActive = { [weak self] in self?.isRecording == true }
@@ -11775,6 +11904,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isRecording = false
         isBusy = false
         recordingPasteTarget = nil
+        recordingToggleStopModifiers = []
         pendingAudioRouteRefresh = false
         audioRestartTask?.cancel()
         audioRestartTask = nil
@@ -11863,6 +11993,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isBusy = false
         recordingPasteTarget = nil
         recordingPermissionInterruptionObserved = false
+        recordingToggleStopModifiers = []
         speechModelStartupProgressFraction = nil
         stopRecordingLevelMeter()
 
@@ -12093,6 +12224,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isBusy = false
         recordingPasteTarget = nil
         recordingPermissionInterruptionObserved = false
+        recordingToggleStopModifiers = []
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
@@ -12729,6 +12861,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
         timing.permissionsCheckedAt = monotonicNanoseconds()
         recordingPermissionInterruptionObserved = false
+        recordingToggleStopModifiers = []
         // Snapshot the destination before audio startup, which can block while
         // rebuilding the engine. A focus change during that work must make the
         // eventual delivery fail closed, not retarget it to the new window.
@@ -12785,8 +12918,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         log(formattedPressTiming(timing))
     }
 
-    private func handleRelease() {
+    private func handleRelease(pendingToggleStopModifiers: CGEventFlags = []) {
         guard isRecording, !isFinishingRecording, !isTerminating else { return }
+        recordingToggleStopModifiers = pendingToggleStopModifiers
         let missing = missingPermissions()
         if !missing.isEmpty {
             // Audio already captured can still be transcribed locally. Do not
@@ -12875,6 +13009,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             missingPermissions: missingPermissions()
         )
         recordingPermissionInterruptionObserved = false
+        let toggleStopModifiers = recordingToggleStopModifiers
+        recordingToggleStopModifiers = []
         // Keep returning speaker audio out of the retained microphone tail.
         // endRecording closes the capture boundary before the asynchronous
         // unmute lifecycle can complete.
@@ -12959,66 +13095,107 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                                                       insertionOutcome: nil,
                                                                       keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0)
                     } else {
-                        let missing = missingPermissions()
+                        var missing = missingPermissions()
                         permissionInterruptionObserved = hasObservedPermissionInterruption(
                             earlier: permissionInterruptionObserved,
                             missingPermissions: missing
                         )
                         let completed = RecentTranscript(processedText: cleaned,
                                                          suffix: settings.pasteSuffix)
-                        let deliveryPolicy = dictationDeliveryPolicy(
+                        var deliveryPolicy = dictationDeliveryPolicy(
                             permissionInterruptionObserved: permissionInterruptionObserved,
                             missingPermissions: missing,
                             deliveredText: completed.deliveredText,
                             capturedTargetBundleIdentifier: recordingPasteTarget?.bundleIdentifier
                         )
-                        let insertionOutcome: TextInsertionOutcome
-                        var copyOnlyReason: TextInsertionCopyOnlyReason?
                         if deliveryPolicy.attemptAutomaticInsertion,
-                           let expectedTarget = recordingPasteTarget {
-                            insertionOutcome = TextInserter.insert(
-                                completed.deliveredText,
-                                preserveClipboard: settings.preserveClipboardForManualRestore,
-                                expectedTarget: expectedTarget
+                           !deliveryPolicy.terminalReviewRequired,
+                           !toggleStopModifiers.isEmpty,
+                           let expectedTarget = recordingPasteTarget,
+                           toggleStopModifierWaitStatus(
+                               flags: CGEventSource.flagsState(.hidSystemState),
+                               expectedToggleStopModifiers: toggleStopModifiers
+                           ) == .waitingForToggleStopRelease,
+                           dictationPasteTargetFocusMismatch(expectedTarget) == nil {
+                            let waitOutcome = await waitForToggleStopModifierRelease(
+                                expectedToggleStopModifiers: toggleStopModifiers,
+                                shouldContinue: { [weak self] in
+                                    guard let self, !self.isTerminating, !Task.isCancelled else { return false }
+                                    return NSWorkspace.shared.frontmostApplication?.processIdentifier
+                                        == expectedTarget.processIdentifier
+                                }
                             )
-                            copyOnlyReason = TextInsertionDiagnostics.copyOnlyReason
-                        } else {
-                            insertionOutcome = TextInserter.copyWithoutPasting(
-                                completed.deliveredText,
-                                preserveClipboard: settings.preserveClipboardForManualRestore
-                            )
-                        }
-                        switch insertionOutcome {
-                        case .inserted:
-                            if settings.playFeedbackSounds {
-                                Sounds.playDone()
+                            switch waitOutcome {
+                            case .released(let waitedSeconds):
+                                log("toggle stop modifier released after \(String(format: "%.3f", waitedSeconds)) s")
+                            case .timedOut(let waitedSeconds):
+                                log("toggle stop modifier still held after \(String(format: "%.3f", waitedSeconds)) s")
+                            case .notNeeded, .unrelatedModifierHeld, .aborted:
+                                break
                             }
-                        case .copiedWithoutPasting:
-                            if permissionInterruptionObserved {
-                                log("paste skipped; permission interrupted before delivery; transcript copied")
-                            } else if recordingPasteTarget == nil {
-                                log("paste skipped; target unavailable at recording start; transcript copied")
+                            if !isTerminating {
+                                missing = missingPermissions()
+                                permissionInterruptionObserved = hasObservedPermissionInterruption(
+                                    earlier: permissionInterruptionObserved,
+                                    missingPermissions: missing
+                                )
+                                deliveryPolicy = dictationDeliveryPolicy(
+                                    permissionInterruptionObserved: permissionInterruptionObserved,
+                                    missingPermissions: missing,
+                                    deliveredText: completed.deliveredText,
+                                    capturedTargetBundleIdentifier: recordingPasteTarget?.bundleIdentifier
+                                )
+                            }
+                        }
+                        if !isTerminating {
+                            let insertionOutcome: TextInsertionOutcome
+                            var copyOnlyReason: TextInsertionCopyOnlyReason?
+                            if deliveryPolicy.attemptAutomaticInsertion,
+                               let expectedTarget = recordingPasteTarget {
+                                insertionOutcome = TextInserter.insert(
+                                    completed.deliveredText,
+                                    preserveClipboard: settings.preserveClipboardForManualRestore,
+                                    expectedTarget: expectedTarget
+                                )
+                                copyOnlyReason = TextInsertionDiagnostics.copyOnlyReason
                             } else {
-                                // The outcome alone does not say which
-                                // check stopped delivery; the diagnostics
-                                // side channel does.
-                                log(automaticInsertionStoppedLogMessage(copyOnlyReason))
+                                insertionOutcome = TextInserter.copyWithoutPasting(
+                                    completed.deliveredText,
+                                    preserveClipboard: settings.preserveClipboardForManualRestore
+                                )
                             }
-                        case .deliveryUncertain:
-                            log("text delivery uncertain after a posted input event; destination check required")
-                        case .failed, .clipboardChanged:
-                            log("text insertion failed")
+                            switch insertionOutcome {
+                            case .inserted:
+                                if settings.playFeedbackSounds {
+                                    Sounds.playDone()
+                                }
+                            case .copiedWithoutPasting:
+                                if permissionInterruptionObserved {
+                                    log("paste skipped; permission interrupted before delivery; transcript copied")
+                                } else if recordingPasteTarget == nil {
+                                    log("paste skipped; target unavailable at recording start; transcript copied")
+                                } else {
+                                    // The outcome alone does not say which
+                                    // check stopped delivery; the diagnostics
+                                    // side channel does.
+                                    log(automaticInsertionStoppedLogMessage(copyOnlyReason))
+                                }
+                            case .deliveryUncertain:
+                                log("text delivery uncertain after a posted input event; destination check required")
+                            case .failed, .clipboardChanged:
+                                log("text insertion failed")
+                            }
+                            completionNotice = dictationCompletionNotice(
+                                processedText: cleaned,
+                                insertionOutcome: insertionOutcome,
+                                keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0,
+                                pasteTargetUnavailableAtStart: recordingPasteTarget == nil
+                                    && !permissionInterruptionObserved
+                                    && missing.isEmpty,
+                                terminalReviewRequired: deliveryPolicy.terminalReviewRequired
+                            )
+                            addToHistory(completed)
                         }
-                        completionNotice = dictationCompletionNotice(
-                            processedText: cleaned,
-                            insertionOutcome: insertionOutcome,
-                            keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0,
-                            pasteTargetUnavailableAtStart: recordingPasteTarget == nil
-                                && !permissionInterruptionObserved
-                                && missing.isEmpty,
-                            terminalReviewRequired: deliveryPolicy.terminalReviewRequired
-                        )
-                        addToHistory(completed)
                     }
                 }
             } catch {
@@ -13065,12 +13242,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard isRecording || audio.isRunning else {
             recordingPasteTarget = nil
             recordingPermissionInterruptionObserved = false
+            recordingToggleStopModifiers = []
             hotkey.resetToggleState()
             return
         }
 
         recordingPasteTarget = nil
         recordingPermissionInterruptionObserved = false
+        recordingToggleStopModifiers = []
         cancelMaxDurationAutoRelease()
         _ = audio.endRecording()
         isRecording = false
@@ -13110,6 +13289,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         cancelMaxDurationAutoRelease()
         cancelPostReleaseCapture()
         recordingPermissionInterruptionObserved = false
+        recordingToggleStopModifiers = []
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
@@ -18709,7 +18889,7 @@ private final class NativeInteractionFixture {
         listener.nativeTestEventFilter = { [weak self] in self?.isOwned($0) ?? false }
         listener.setHotkey(binding)
         listener.onPress = { [weak self] _ in self?.presses += 1; self?.active = self?.blocked == false }
-        listener.onRelease = { [weak self] in self?.releases += 1; self?.active = false }
+        listener.onRelease = { [weak self] _ in self?.releases += 1; self?.active = false }
         listener.onCancel = { [weak self] in
             self?.cancellations += 1
             self?.active = false
@@ -23106,6 +23286,7 @@ private enum PresspeechSelfTest {
                                                       syntheticCommandDown: true),
                    equals: false,
                    "Option appearing after Command-down must stop before Paste key-down")
+        try testToggleStopModifierReleaseWait()
         let interruptedKeyUpProbe = MainActor.assumeIsolated {
             let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
                                                          pasteKey: 0x09)
@@ -28622,6 +28803,343 @@ private enum PresspeechSelfTest {
             equals: .pass,
             "later Escape keyUp should pass through once the canceled press is complete"
         )
+    }
+
+    private static func runMainActorAsync<T: Sendable>(
+        _ operation: @escaping @MainActor () async throws -> T
+    ) throws -> T {
+        try MainActor.assumeIsolated {
+            var outcome: Result<T, Error>?
+            Task { @MainActor in
+                do { outcome = .success(try await operation()) }
+                catch { outcome = .failure(error) }
+            }
+            while outcome == nil {
+                RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.002))
+            }
+            return try outcome!.get()
+        }
+    }
+
+    private static func testToggleStopModifierReleaseWait() throws {
+        let rightOption = hotkeyChoice(forKeycode: 61)
+        let rightControl = hotkeyChoice(forKeycode: 62)
+        let rightCommand = hotkeyChoice(forKeycode: 54)
+        let f5 = hotkeyChoice(forKeycode: 96)
+        let comboControlShiftSpace = HotkeyChoice(
+            name: "Control + Shift + Space",
+            keycode: 49,
+            isModifier: false,
+            modifierFlag: nil,
+            requiredModifiers: [.maskControl, .maskShift]
+        )
+
+        // 1. pendingToggleStopModifierFlags: only toggle-mode stops with modifier(s) wait.
+        try expect(
+            pendingToggleStopModifierFlags(for: rightOption, triggerMode: .toggle, actions: [.release]),
+            equals: .maskAlternate,
+            "toggle stop with Right Option should expect Option release"
+        )
+        try expect(
+            pendingToggleStopModifierFlags(for: rightControl, triggerMode: .toggle, actions: [.release]),
+            equals: .maskControl,
+            "toggle stop with Right Control should expect Control release"
+        )
+        try expect(
+            pendingToggleStopModifierFlags(for: rightCommand, triggerMode: .toggle, actions: [.release]),
+            equals: .maskCommand,
+            "toggle stop with Right Command should expect Command release"
+        )
+        try expect(
+            pendingToggleStopModifierFlags(for: comboControlShiftSpace, triggerMode: .toggle, actions: [.release]),
+            equals: [.maskControl, .maskShift],
+            "toggle stop with a combination hotkey should expect its required modifiers to release"
+        )
+        try expect(
+            pendingToggleStopModifierFlags(for: f5, triggerMode: .toggle, actions: [.release]),
+            equals: [],
+            "toggle stop with a plain F-key has no modifier to wait for"
+        )
+        try expect(
+            pendingToggleStopModifierFlags(for: rightOption, triggerMode: .toggle, actions: [.press]),
+            equals: [],
+            "toggle start press must not set pending stop modifiers"
+        )
+        try expect(
+            pendingToggleStopModifierFlags(for: rightOption, triggerMode: .hold, actions: [.release]),
+            equals: [],
+            "hold mode releases on key-up and must remain unchanged"
+        )
+
+        // 2. Status classification: only the toggle-stop modifier(s) permit waiting.
+        try expect(
+            toggleStopModifierWaitStatus(flags: [], expectedToggleStopModifiers: .maskAlternate),
+            equals: .clear,
+            "empty HID flags should be immediately clear"
+        )
+        try expect(
+            toggleStopModifierWaitStatus(flags: .maskAlphaShift, expectedToggleStopModifiers: .maskAlternate),
+            equals: .clear,
+            "Caps Lock alone must be treated as clear"
+        )
+        try expect(
+            toggleStopModifierWaitStatus(flags: .maskAlternate, expectedToggleStopModifiers: .maskAlternate),
+            equals: .waitingForToggleStopRelease,
+            "held Right Option during a Right Option toggle stop should wait"
+        )
+        try expect(
+            toggleStopModifierWaitStatus(flags: [.maskAlternate, .maskAlphaShift],
+                                         expectedToggleStopModifiers: .maskAlternate),
+            equals: .waitingForToggleStopRelease,
+            "Caps Lock alongside the toggle-stop modifier should still wait for the toggle modifier"
+        )
+        try expect(
+            toggleStopModifierWaitStatus(flags: .maskCommand, expectedToggleStopModifiers: .maskAlternate),
+            equals: .unrelatedModifierHeld,
+            "holding Command when Right Option was the hotkey must abort waiting immediately"
+        )
+        try expect(
+            toggleStopModifierWaitStatus(flags: [.maskAlternate, .maskShift],
+                                         expectedToggleStopModifiers: .maskAlternate),
+            equals: .unrelatedModifierHeld,
+            "holding an extra unrelated modifier alongside the toggle hotkey must abort waiting"
+        )
+        try expect(
+            toggleStopModifierWaitStatus(flags: .maskAlternate, expectedToggleStopModifiers: []),
+            equals: .unrelatedModifierHeld,
+            "hold mode (empty expected modifiers) must never wait for a held modifier"
+        )
+
+        // 3. Hold mode unchanged: empty expected modifiers returns immediately with zero sleeps.
+        let holdProbe = try runMainActorAsync {
+            var reads = 0
+            var sleeps = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: [],
+                currentFlags: {
+                    reads += 1
+                    return .maskAlternate
+                },
+                sleep: { _ in sleeps += 1 }
+            )
+            return (outcome: outcome, reads: reads, sleeps: sleeps)
+        }
+        try expect(holdProbe.outcome, equals: .notNeeded,
+                   "hold mode should skip toggle-stop modifier waiting entirely")
+        try expect(holdProbe.reads, equals: 0,
+                   "hold mode should not poll HID flags during toggle-stop wait")
+        try expect(holdProbe.sleeps, equals: 0,
+                   "hold mode should never sleep before delivery")
+
+        // 4. Already released before delivery: returns immediately with zero sleeps.
+        let alreadyClearProbe = try runMainActorAsync {
+            var sleeps = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: .maskAlternate,
+                currentFlags: { [] },
+                sleep: { _ in sleeps += 1 }
+            )
+            return (outcome: outcome, sleeps: sleeps)
+        }
+        try expect(alreadyClearProbe.outcome, equals: .notNeeded,
+                   "already-released toggle modifier should not wait")
+        try expect(alreadyClearProbe.sleeps, equals: 0,
+                   "already-released toggle modifier should perform zero sleeps")
+
+        // 5. Early release: polls cleanly and succeeds as soon as the stop modifier lifts.
+        let earlyReleaseProbe = try runMainActorAsync {
+            var nowSeconds: TimeInterval = 100.0
+            var sleeps: [TimeInterval] = []
+            // Held on initial check, 10 ms, 20 ms; released at 30 ms.
+            let samples: [CGEventFlags] = [.maskAlternate, .maskAlternate, .maskAlternate, []]
+            var index = 0
+            var finalFlags: CGEventFlags = .maskAlternate
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: .maskAlternate,
+                maxWaitSeconds: 0.5,
+                pollIntervalSeconds: 0.01,
+                currentFlags: {
+                    let flags = samples[min(index, samples.count - 1)]
+                    index += 1
+                    finalFlags = flags
+                    return flags
+                },
+                now: { nowSeconds },
+                sleep: { delta in
+                    sleeps.append(delta)
+                    nowSeconds += delta
+                }
+            )
+            return (
+                outcome: outcome,
+                sleepCount: sleeps.count,
+                allowsDelivery: modifiersAllowSyntheticTextDelivery(finalFlags, syntheticCommandDown: false)
+            )
+        }
+        try expect(earlyReleaseProbe.sleepCount, equals: 3,
+                   "early release should stop polling as soon as the stop modifier lifts")
+        try expect(earlyReleaseProbe.allowsDelivery, equals: true,
+                   "physical modifier guard should pass once the toggle stop modifier lifts")
+        if case .released(let waited) = earlyReleaseProbe.outcome {
+            try expect(abs(waited - 0.03) < 0.0001, equals: true,
+                       "early release should report the elapsed wait duration")
+        } else {
+            throw SelfTestFailure.failed("expected .released for early release, got \(earlyReleaseProbe.outcome)")
+        }
+
+        // 6. Timeout fallback: if held past the bound, stop waiting and let guard fail closed.
+        let timeoutProbe = try runMainActorAsync {
+            var nowSeconds: TimeInterval = 200.0
+            var sleepCount = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: .maskAlternate,
+                maxWaitSeconds: 0.05,
+                pollIntervalSeconds: 0.02,
+                currentFlags: { .maskAlternate },
+                now: { nowSeconds },
+                sleep: { delta in
+                    sleepCount += 1
+                    nowSeconds += delta
+                }
+            )
+            return (
+                outcome: outcome,
+                sleepCount: sleepCount,
+                elapsed: nowSeconds - 200.0,
+                allowsDelivery: modifiersAllowSyntheticTextDelivery(.maskAlternate, syntheticCommandDown: false)
+            )
+        }
+        try expect(timeoutProbe.sleepCount, equals: 3,
+                   "timeout wait should clamp the final sleep to the remaining bound")
+        try expect(abs(timeoutProbe.elapsed - 0.05) < 0.0001, equals: true,
+                   "timeout wait should not exceed maxWaitSeconds")
+        try expect(timeoutProbe.allowsDelivery, equals: false,
+                   "a still-held toggle modifier after timeout must still fall back to clipboard recovery")
+        if case .timedOut(let waited) = timeoutProbe.outcome {
+            try expect(abs(waited - 0.05) < 0.0001, equals: true,
+                       "timeout outcome should report the bounded wait duration")
+        } else {
+            throw SelfTestFailure.failed("expected .timedOut when modifier stays held, got \(timeoutProbe.outcome)")
+        }
+
+        // 7. Unrelated modifier held immediately or pressed mid-wait stops waiting immediately.
+        let immediateUnrelatedProbe = try runMainActorAsync {
+            var sleeps = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: .maskAlternate,
+                currentFlags: { [.maskAlternate, .maskCommand] },
+                sleep: { _ in sleeps += 1 }
+            )
+            return (outcome: outcome, sleeps: sleeps)
+        }
+        try expect(immediateUnrelatedProbe.outcome, equals: .unrelatedModifierHeld,
+                   "an unrelated modifier held alongside the toggle modifier must fail immediately")
+        try expect(immediateUnrelatedProbe.sleeps, equals: 0,
+                   "an immediately held unrelated modifier must not sleep")
+
+        let midWaitUnrelatedProbe = try runMainActorAsync {
+            var nowSeconds: TimeInterval = 300.0
+            var sleeps = 0
+            let samples: [CGEventFlags] = [.maskAlternate, .maskAlternate, [.maskAlternate, .maskControl]]
+            var index = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: .maskAlternate,
+                maxWaitSeconds: 0.5,
+                pollIntervalSeconds: 0.01,
+                currentFlags: {
+                    let flags = samples[min(index, samples.count - 1)]
+                    index += 1
+                    return flags
+                },
+                now: { nowSeconds },
+                sleep: { delta in
+                    sleeps += 1
+                    nowSeconds += delta
+                }
+            )
+            return (outcome: outcome, sleeps: sleeps)
+        }
+        try expect(midWaitUnrelatedProbe.outcome, equals: .unrelatedModifierHeld,
+                   "an unrelated modifier pressed during the wait must stop waiting immediately")
+        try expect(midWaitUnrelatedProbe.sleeps, equals: 2,
+                   "mid-wait unrelated modifier should stop on the tick it appears")
+
+        // 8. Multi-modifier combination hotkey waits until all of its modifiers lift.
+        let comboProbe = try runMainActorAsync {
+            var nowSeconds: TimeInterval = 400.0
+            var sleeps = 0
+            let samples: [CGEventFlags] = [[.maskControl, .maskShift], .maskControl, []]
+            var index = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: comboControlShiftSpace.heldModifierFlags,
+                maxWaitSeconds: 0.5,
+                pollIntervalSeconds: 0.01,
+                currentFlags: {
+                    let flags = samples[min(index, samples.count - 1)]
+                    index += 1
+                    return flags
+                },
+                now: { nowSeconds },
+                sleep: { delta in
+                    sleeps += 1
+                    nowSeconds += delta
+                }
+            )
+            return (outcome: outcome, sleeps: sleeps)
+        }
+        try expect(comboProbe.sleeps, equals: 2,
+                   "combination toggle stop should wait until every hotkey modifier lifts")
+        if case .released = comboProbe.outcome {
+            // pass
+        } else {
+            throw SelfTestFailure.failed("expected .released for combination toggle stop, got \(comboProbe.outcome)")
+        }
+
+        // 9. Focus loss / termination during wait aborts cleanly without waiting out the bound.
+        let abortProbe = try runMainActorAsync {
+            var nowSeconds: TimeInterval = 500.0
+            var sleeps = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: .maskAlternate,
+                maxWaitSeconds: 0.5,
+                pollIntervalSeconds: 0.01,
+                currentFlags: { .maskAlternate },
+                now: { nowSeconds },
+                shouldContinue: { sleeps < 1 },
+                sleep: { delta in
+                    sleeps += 1
+                    nowSeconds += delta
+                }
+            )
+            return (outcome: outcome, sleeps: sleeps)
+        }
+        try expect(abortProbe.outcome, equals: .aborted,
+                   "wait should abort immediately if termination or frontmost-app change occurs")
+        try expect(abortProbe.sleeps, equals: 1,
+                   "aborted wait must stop on the first failed continuation check")
+
+        // 10. Real Task.sleep yield check: confirms non-blocking async waiting on MainActor.
+        let realYieldProbe = try runMainActorAsync {
+            var checks = 0
+            let outcome = await waitForToggleStopModifierRelease(
+                expectedToggleStopModifiers: .maskAlternate,
+                maxWaitSeconds: 0.2,
+                pollIntervalSeconds: 0.005,
+                currentFlags: {
+                    checks += 1
+                    return checks < 3 ? .maskAlternate : []
+                }
+            )
+            return (outcome: outcome, checks: checks)
+        }
+        try expect(realYieldProbe.checks, equals: 3,
+                   "default Task.sleep polling should re-check until the stop modifier clears")
+        if case .released(let waited) = realYieldProbe.outcome {
+            try expect(waited >= 0.005 && waited < 0.2, equals: true,
+                       "real Task.sleep wait should complete promptly after modifier release")
+        } else {
+            throw SelfTestFailure.failed("expected .released from real Task.sleep wait, got \(realYieldProbe.outcome)")
+        }
     }
 
     private static func event(

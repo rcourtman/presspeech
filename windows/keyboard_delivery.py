@@ -8,6 +8,7 @@ can attempt key-up cleanup when Windows does not accept the whole batch.
 Importing this module does not load a Windows DLL or inject input.
 """
 import ctypes
+import time
 
 
 VK_V = 0x56
@@ -28,6 +29,22 @@ _MODIFIER_KEYS = (
     VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL,
     VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN,
 )
+
+# Map each modifier hotkey to the Win32 virtual keys that report down while
+# that physical key is held (both side-specific and generic modifier VKs).
+_MODIFIER_HOTKEY_EXPECTED_VKS = {
+    "left shift": frozenset((VK_LSHIFT, VK_SHIFT)),
+    "right shift": frozenset((VK_RSHIFT, VK_SHIFT)),
+    "left ctrl": frozenset((VK_LCONTROL, VK_CONTROL)),
+    "right ctrl": frozenset((VK_RCONTROL, VK_CONTROL)),
+    "left alt": frozenset((VK_LMENU, VK_MENU)),
+    "right alt": frozenset((VK_RMENU, VK_MENU)),
+    "left win": frozenset((VK_LWIN,)),
+    "right win": frozenset((VK_RWIN,)),
+}
+
+TOGGLE_STOP_MODIFIER_RELEASE_WAIT_MAX_SEC = 0.5
+TOGGLE_STOP_MODIFIER_RELEASE_POLL_SEC = 0.01
 
 _INPUT_KEYBOARD = 1
 _KEYEVENTF_KEYUP = 0x0002
@@ -142,6 +159,83 @@ class _WindowsAPI:
             ctypes.POINTER(_INPUT),
             ctypes.c_int,
         )
+
+
+def held_paste_keys(*, api=None):
+    """Return the frozenset of paste/modifier virtual keys currently held."""
+    try:
+        api = _WindowsAPI() if api is None else api
+        return frozenset(
+            key for key in _MODIFIER_KEYS
+            if int(api.GetAsyncKeyState(key)) & 0x8000
+        )
+    except Exception:
+        raise ModifierStateError(
+            "Windows could not check held modifier keys") from None
+
+
+def toggle_stop_modifier_vks(hotkey_name):
+    """Return the modifier VKs expected from holding a toggle-stop hotkey."""
+    if not isinstance(hotkey_name, str):
+        return frozenset()
+    return _MODIFIER_HOTKEY_EXPECTED_VKS.get(
+        hotkey_name.strip().lower(), frozenset())
+
+
+def toggle_stop_modifier_wait_status(held_vks, expected_vks):
+    """Classify currently held paste/modifier VKs for toggle-stop waiting."""
+    relevant = frozenset(held_vks) & frozenset(_MODIFIER_KEYS)
+    if not relevant:
+        return "clear"
+    expected = frozenset(expected_vks) & frozenset(_MODIFIER_KEYS)
+    if expected and relevant.issubset(expected):
+        return "waiting"
+    return "unrelated"
+
+
+def wait_for_toggle_stop_modifier_release(
+    expected_vks,
+    *,
+    read_held_vks,
+    max_wait_sec=TOGGLE_STOP_MODIFIER_RELEASE_WAIT_MAX_SEC,
+    poll_sec=TOGGLE_STOP_MODIFIER_RELEASE_POLL_SEC,
+    monotonic=None,
+    sleep=None,
+    should_continue=None,
+):
+    """Wait in a bounded way for a toggle-stop modifier hotkey to be released.
+
+    Returns one of: "not-needed", "released", "unrelated", "timed-out", "aborted".
+    """
+    expected = frozenset(expected_vks) & frozenset(_MODIFIER_KEYS)
+    if not expected:
+        return "not-needed"
+    if should_continue is not None and not should_continue():
+        return "aborted"
+    status = toggle_stop_modifier_wait_status(read_held_vks(), expected)
+    if status == "clear":
+        return "not-needed"
+    if status == "unrelated":
+        return "unrelated"
+
+    clock = time.monotonic if monotonic is None else monotonic
+    sleeper = time.sleep if sleep is None else sleep
+    started = clock()
+    while True:
+        elapsed = max(0.0, clock() - started)
+        remaining = max_wait_sec - elapsed
+        if remaining <= 0.0:
+            return "timed-out"
+        sleeper(min(poll_sec, remaining))
+        if should_continue is not None and not should_continue():
+            return "aborted"
+        status = toggle_stop_modifier_wait_status(read_held_vks(), expected)
+        if status == "clear":
+            return "released"
+        if status == "unrelated":
+            return "unrelated"
+        if max(0.0, clock() - started) >= max_wait_sec:
+            return "timed-out"
 
 
 def paste_keys_held(*, api=None):

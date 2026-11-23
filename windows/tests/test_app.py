@@ -1854,6 +1854,93 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.request_stop.assert_not_called()
         self.assertFalse(instance._key_held)
 
+    def test_toggle_stop_passes_modifier_vks_for_modifier_hotkey(self):
+        instance = self.make_app(hotkey="right alt", trigger="toggle")
+        instance.recording = True
+
+        instance._on_press(app.pkb.Key.alt_r)
+
+        instance.request_stop.assert_called_once_with(
+            toggle_stop_modifier_vks=frozenset((
+                app.keyboard_delivery.VK_RMENU,
+                app.keyboard_delivery.VK_MENU,
+            ))
+        )
+
+    def test_toggle_stop_with_function_key_passes_no_modifier_vks(self):
+        instance = self.make_app(hotkey="f8", trigger="toggle")
+        instance.recording = True
+
+        instance._on_press(app.pkb.Key.f8)
+
+        instance.request_stop.assert_called_once_with()
+
+    def test_paste_waits_for_toggle_stop_modifier_release_then_pastes(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._injecting_keys = False
+        instance._exiting = False
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._filter_pressed_vks = {app.keyboard_delivery.VK_RMENU}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        target = app.PasteTarget("notepad.exe", 1234, 41, 0x2000)
+        expected_vks = app.keyboard_delivery.toggle_stop_modifier_vks("right alt")
+        polls = [0]
+
+        def held_keys():
+            polls[0] += 1
+            if polls[0] >= 2:
+                instance._filter_pressed_vks.discard(app.keyboard_delivery.VK_RMENU)
+                return frozenset()
+            return frozenset((app.keyboard_delivery.VK_RMENU,
+                              app.keyboard_delivery.VK_MENU))
+
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(app.keyboard_delivery.time, "sleep"), \
+                mock.patch.object(app, "_foreground_paste_target", return_value=target), \
+                mock.patch.object(app, "_process_integrity_level", return_value=0x2000), \
+                mock.patch.object(app.keyboard_delivery, "held_paste_keys", side_effect=held_keys), \
+                mock.patch.object(app.keyboard_delivery, "paste_keys_held", return_value=False), \
+                mock.patch.object(app.keyboard_delivery, "Controller") as controller:
+            self.assertTrue(instance._paste(
+                "hello", target, toggle_stop_modifier_vks=expected_vks))
+
+        copy.assert_called_once_with("hello")
+        controller.return_value.shortcut.assert_called_once()
+
+    def test_paste_fails_closed_when_toggle_stop_modifier_stays_held_past_bound(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._injecting_keys = False
+        instance._exiting = False
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._filter_pressed_vks = {app.keyboard_delivery.VK_RMENU}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        instance.open_delivery_recovery = mock.Mock(return_value=True)
+        target = app.PasteTarget("notepad.exe", 1234, 41, 0x2000)
+        expected_vks = app.keyboard_delivery.toggle_stop_modifier_vks("right alt")
+        now = [0.0]
+
+        def advance(delta):
+            now[0] += delta
+
+        with mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
+                mock.patch.object(app.keyboard_delivery.time, "monotonic", side_effect=lambda: now[0]), \
+                mock.patch.object(app.keyboard_delivery.time, "sleep", side_effect=advance), \
+                mock.patch.object(
+                    app.keyboard_delivery, "held_paste_keys",
+                    return_value=frozenset((app.keyboard_delivery.VK_RMENU,
+                                            app.keyboard_delivery.VK_MENU))), \
+                mock.patch.object(app.keyboard_delivery, "Controller") as controller:
+            self.assertFalse(instance._paste(
+                "hello", target, toggle_stop_modifier_vks=expected_vks))
+
+        copy.assert_not_called()
+        controller.assert_not_called()
+        self.assertEqual(instance._undelivered_dictations, ["hello"])
+
 
 class HotkeyListenerLifecycleTests(unittest.TestCase):
     def make_app(self):

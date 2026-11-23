@@ -671,6 +671,7 @@ class PresspeechApp:
         self._undelivered_lock = threading.Lock()
         self._recording_paste_target = PasteTarget("", 0)
         self._recording_scratchpad = None
+        self._recording_toggle_stop_modifier_vks = frozenset()
         self._rec_epoch = 0
         self._recording_limit_timer = None
         self._peak_rms = 0.0
@@ -1404,7 +1405,12 @@ class PresspeechApp:
         self._log("key down: %s" % (key,))
         if self._held_hotkey_trigger == "toggle":
             if self.recording:
-                self.request_stop()
+                stop_vks = keyboard_delivery.toggle_stop_modifier_vks(
+                    self.settings["hotkey"])
+                if stop_vks:
+                    self.request_stop(toggle_stop_modifier_vks=stop_vks)
+                else:
+                    self.request_stop()
             else:
                 self.start_recording()
         else:
@@ -1638,6 +1644,7 @@ class PresspeechApp:
             self._capture_ready = False
             self._capture_ready_at = 0.0
             self._stop_before_ready = False
+            self._recording_toggle_stop_modifier_vks = frozenset()
             self._first_audio_callback = threading.Event()
             self._model_idle_epoch += 1
             self._recording_paste_target = paste_target
@@ -1969,12 +1976,15 @@ class PresspeechApp:
         return (without_audio is not None and
                 without_audio >= CAPTURE_STALL_TIMEOUT_SEC)
 
-    def request_stop(self):
+    def request_stop(self, *, toggle_stop_modifier_vks=frozenset()):
         """Stop after silence, retaining the full safety window for ongoing speech."""
         released_at = time.perf_counter()
         with self.lock:
             if not self.recording:
                 return
+            if toggle_stop_modifier_vks:
+                self._recording_toggle_stop_modifier_vks = frozenset(
+                    toggle_stop_modifier_vks)
             epoch = self._rec_epoch
             # A quick tap can end while PortAudio is opening or the start cue
             # is playing. Do not let the later callback/cue turn that released
@@ -2011,6 +2021,7 @@ class PresspeechApp:
             self._input_overflowed = False
             self._recording_paste_target = PasteTarget("", 0)
             self._recording_scratchpad = None
+            self._recording_toggle_stop_modifier_vks = frozenset()
             self._recording_input_device = None
             recording_limit_timer = getattr(
                 self, "_recording_limit_timer", None)
@@ -2195,6 +2206,9 @@ class PresspeechApp:
             paste_target = self._recording_paste_target
             scratchpad_target = getattr(self, "_recording_scratchpad", None)
             self._recording_scratchpad = None
+            toggle_stop_modifier_vks = getattr(
+                self, "_recording_toggle_stop_modifier_vks", frozenset())
+            self._recording_toggle_stop_modifier_vks = frozenset()
             recording_device = self._recording_input_device
             self._recording_input_device = None
             stream = self.stream
@@ -2267,9 +2281,13 @@ class PresspeechApp:
         self._set_indicator("transcribing")
         self._log("recording stopped; %.2fs captured, transcribing" % (audio.size / 16000.0))
         try:
+            submit_kwargs = (
+                {"toggle_stop_modifier_vks": toggle_stop_modifier_vks}
+                if toggle_stop_modifier_vks else {}
+            )
             self._model_executor.submit(
                 self._transcribe_worker, audio, paste_target, scratchpad_target,
-                input_overflowed)
+                input_overflowed, **submit_kwargs)
         except Exception as exc:
             # In particular, ThreadPoolExecutor rejects work after shutdown.
             # No worker will run its usual finally block to clear this state.
@@ -2751,11 +2769,17 @@ class PresspeechApp:
 
     def _transcribe_worker(
             self, audio, paste_target=PasteTarget("", 0),
-            scratchpad_target=None, input_overflowed=False):
+            scratchpad_target=None, input_overflowed=False,
+            *, toggle_stop_modifier_vks=frozenset()):
         outcome = None
         try:
-            outcome = self._transcribe_worker_inner(
-                audio, paste_target, scratchpad_target, input_overflowed)
+            if toggle_stop_modifier_vks:
+                outcome = self._transcribe_worker_inner(
+                    audio, paste_target, scratchpad_target, input_overflowed,
+                    toggle_stop_modifier_vks=toggle_stop_modifier_vks)
+            else:
+                outcome = self._transcribe_worker_inner(
+                    audio, paste_target, scratchpad_target, input_overflowed)
             return outcome
         finally:
             # Empty/error results still exercised the model. Refresh the idle
@@ -2805,7 +2829,8 @@ class PresspeechApp:
 
     def _transcribe_worker_inner(
             self, audio, paste_target=PasteTarget("", 0),
-            scratchpad_target=None, input_overflowed=False):
+            scratchpad_target=None, input_overflowed=False,
+            *, toggle_stop_modifier_vks=frozenset()):
         model_started = time.perf_counter()
         used_english_only_fallback = False
         timing_summary = None
@@ -2899,7 +2924,12 @@ class PresspeechApp:
             # silently paste a potentially incomplete transcript.
             self._remember_undelivered_dictation(text, "audio-overflow")
             return
-        self._deliver_text(text, paste_target, scratchpad_target)
+        if toggle_stop_modifier_vks:
+            self._deliver_text(
+                text, paste_target, scratchpad_target,
+                toggle_stop_modifier_vks=toggle_stop_modifier_vks)
+        else:
+            self._deliver_text(text, paste_target, scratchpad_target)
 
     def _transcribe_with_cached_fallback(self, audio):
         """Return (text, timing) from an installed base.en, or None."""
@@ -2965,10 +2995,14 @@ class PresspeechApp:
 
     def _deliver_text(
             self, text, paste_target=PasteTarget("", 0),
-            scratchpad_target=None):
+            scratchpad_target=None, *, toggle_stop_modifier_vks=frozenset()):
         """Deliver only to the destination captured when recording began."""
+        paste_kwargs = (
+            {"toggle_stop_modifier_vks": toggle_stop_modifier_vks}
+            if toggle_stop_modifier_vks else {}
+        )
         if scratchpad_target is None:
-            self._paste(text, paste_target)
+            self._paste(text, paste_target, **paste_kwargs)
             return
         if (scratchpad_target is getattr(self, "scratchpad", None) and
                 getattr(scratchpad_target, "root", None) is not None):
@@ -2988,7 +3022,7 @@ class PresspeechApp:
                 # Preserve the same focus-change behavior as normal app
                 # delivery. _paste copies the transcript, rechecks the target,
                 # and refuses to inject Ctrl+V into the newly focused window.
-                self._paste(text, paste_target)
+                self._paste(text, paste_target, **paste_kwargs)
             return
         # Try Dictation is a private sink. Its window can close while the model
         # is working; retain the completed text for explicit recovery rather
@@ -3163,20 +3197,58 @@ class PresspeechApp:
         self.notify("Dictation copied", message)
         return True
 
-    def _paste_keys_held_in_hook(self):
-        """Catch reserved hotkeys that may not show as asynchronously down."""
+    def _held_paste_keys_in_hook(self):
+        """Return reserved modifier/paste VKs currently held according to the hook."""
         transaction_lock = getattr(self, "_hotkey_transaction_lock", None)
         with transaction_lock if transaction_lock is not None else nullcontext():
             pressed = getattr(self, "_filter_pressed_vks", ())
-            return any(key in pressed for key in keyboard_delivery._MODIFIER_KEYS)
+            return frozenset(
+                key for key in keyboard_delivery._MODIFIER_KEYS
+                if key in pressed
+            )
 
-    def _paste(self, text, paste_target=PasteTarget("", 0)):
+    def _paste_keys_held_in_hook(self):
+        """Catch reserved hotkeys that may not show as asynchronously down."""
+        return bool(self._held_paste_keys_in_hook())
+
+    def _wait_for_toggle_stop_modifier_release(self, toggle_stop_modifier_vks):
+        """Wait in a bounded way for a toggle-stop modifier hotkey to lift."""
+        def read_held_vks():
+            return (
+                self._held_paste_keys_in_hook()
+                | keyboard_delivery.held_paste_keys()
+            )
+
+        outcome = keyboard_delivery.wait_for_toggle_stop_modifier_release(
+            toggle_stop_modifier_vks,
+            read_held_vks=read_held_vks,
+            should_continue=lambda: not getattr(self, "_exiting", False),
+        )
+        if outcome == "released":
+            self._log("toggle stop modifier released before paste")
+        elif outcome == "timed-out":
+            self._log("toggle stop modifier still held after wait")
+        return outcome
+
+    def _paste(self, text, paste_target=PasteTarget("", 0), *,
+               toggle_stop_modifier_vks=frozenset()):
+        if not isinstance(paste_target, PasteTarget):
+            paste_target = PasteTarget(str(paste_target or ""), 0)
+        if (toggle_stop_modifier_vks and paste_target.window_handle and
+                not _requires_terminal_review(text, paste_target.process_name)):
+            try:
+                wait_outcome = self._wait_for_toggle_stop_modifier_release(
+                    toggle_stop_modifier_vks)
+            except keyboard_delivery.ModifierStateError:
+                self._remember_undelivered_dictation(
+                    text, "modifier-state-unavailable")
+                return False
+            if wait_outcome == "aborted" and getattr(self, "_exiting", False):
+                return False
         # Preserve the old clipboard if the hook already knows paste is unsafe.
         if self._paste_keys_held_in_hook():
             self._remember_undelivered_dictation(text, "modifier-held")
             return False
-        if not isinstance(paste_target, PasteTarget):
-            paste_target = PasteTarget(str(paste_target or ""), 0)
         # Known-invalid destinations must not replace the user's clipboard.
         # The later checks still catch focus, integrity and clipboard changes
         # that occur after this point-in-time preflight.

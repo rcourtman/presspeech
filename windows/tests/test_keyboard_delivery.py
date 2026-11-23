@@ -374,5 +374,158 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         api.SendInput.assert_not_called()
 
 
+class ToggleStopModifierWaitTests(unittest.TestCase):
+    def test_toggle_stop_modifier_vks_maps_modifiers_and_ignores_function_keys(self):
+        self.assertEqual(
+            delivery.toggle_stop_modifier_vks("right alt"),
+            frozenset((delivery.VK_RMENU, delivery.VK_MENU)),
+        )
+        self.assertEqual(
+            delivery.toggle_stop_modifier_vks("left ctrl"),
+            frozenset((delivery.VK_LCONTROL, delivery.VK_CONTROL)),
+        )
+        self.assertEqual(
+            delivery.toggle_stop_modifier_vks("right win"),
+            frozenset((delivery.VK_RWIN,)),
+        )
+        self.assertEqual(delivery.toggle_stop_modifier_vks("f8"), frozenset())
+        self.assertEqual(delivery.toggle_stop_modifier_vks(None), frozenset())
+
+    def test_held_paste_keys_returns_down_modifier_vks(self):
+        api = mock.Mock()
+        api.GetAsyncKeyState.side_effect = (
+            lambda vk: -32768 if vk in (delivery.VK_RMENU, delivery.VK_MENU) else 0
+        )
+        self.assertEqual(
+            delivery.held_paste_keys(api=api),
+            frozenset((delivery.VK_RMENU, delivery.VK_MENU)),
+        )
+
+    def test_wait_skips_when_expected_vks_empty_or_already_clear(self):
+        reads = []
+        sleeps = []
+        expected = delivery.toggle_stop_modifier_vks("right alt")
+
+        # Hold mode / F-key: empty expected VKs never reads or sleeps.
+        self.assertEqual(
+            delivery.wait_for_toggle_stop_modifier_release(
+                frozenset(),
+                read_held_vks=lambda: reads.append(1) or frozenset((delivery.VK_RMENU,)),
+                sleep=sleeps.append,
+            ),
+            "not-needed",
+        )
+        self.assertEqual(reads, [])
+        self.assertEqual(sleeps, [])
+
+        # Toggle stop modifier already released before delivery.
+        self.assertEqual(
+            delivery.wait_for_toggle_stop_modifier_release(
+                expected,
+                read_held_vks=lambda: frozenset(),
+                sleep=sleeps.append,
+            ),
+            "not-needed",
+        )
+        self.assertEqual(sleeps, [])
+
+    def test_wait_succeeds_on_early_release(self):
+        expected = delivery.toggle_stop_modifier_vks("right alt")
+        now = [10.0]
+        sleeps = []
+        samples = [
+            frozenset((delivery.VK_RMENU, delivery.VK_MENU)),
+            frozenset((delivery.VK_RMENU, delivery.VK_MENU)),
+            frozenset(),
+        ]
+        index = [0]
+
+        def read():
+            value = samples[min(index[0], len(samples) - 1)]
+            index[0] += 1
+            return value
+
+        def sleep(delta):
+            sleeps.append(delta)
+            now[0] += delta
+
+        outcome = delivery.wait_for_toggle_stop_modifier_release(
+            expected,
+            read_held_vks=read,
+            max_wait_sec=0.5,
+            poll_sec=0.01,
+            monotonic=lambda: now[0],
+            sleep=sleep,
+        )
+        self.assertEqual(outcome, "released")
+        self.assertEqual(sleeps, [0.01, 0.01])
+
+    def test_wait_aborts_immediately_on_unrelated_modifier(self):
+        expected = delivery.toggle_stop_modifier_vks("right alt")
+        sleeps = []
+
+        # Left Alt is distinct from Right Alt on Windows and must fail immediately.
+        self.assertEqual(
+            delivery.wait_for_toggle_stop_modifier_release(
+                expected,
+                read_held_vks=lambda: frozenset((delivery.VK_LMENU, delivery.VK_MENU)),
+                sleep=sleeps.append,
+            ),
+            "unrelated",
+        )
+        # Right Alt + Ctrl held together must fail immediately.
+        self.assertEqual(
+            delivery.wait_for_toggle_stop_modifier_release(
+                expected,
+                read_held_vks=lambda: frozenset((delivery.VK_RMENU, delivery.VK_LCONTROL)),
+                sleep=sleeps.append,
+            ),
+            "unrelated",
+        )
+        self.assertEqual(sleeps, [])
+
+    def test_wait_times_out_cleanly_at_bound(self):
+        expected = delivery.toggle_stop_modifier_vks("right alt")
+        now = [20.0]
+        sleeps = []
+
+        def sleep(delta):
+            sleeps.append(delta)
+            now[0] += delta
+
+        outcome = delivery.wait_for_toggle_stop_modifier_release(
+            expected,
+            read_held_vks=lambda: frozenset((delivery.VK_RMENU, delivery.VK_MENU)),
+            max_wait_sec=0.05,
+            poll_sec=0.02,
+            monotonic=lambda: now[0],
+            sleep=sleep,
+        )
+        self.assertEqual(outcome, "timed-out")
+        self.assertAlmostEqual(now[0] - 20.0, 0.05, places=6)
+        self.assertEqual(len(sleeps), 3)
+
+    def test_wait_aborts_when_should_continue_returns_false(self):
+        expected = delivery.toggle_stop_modifier_vks("right alt")
+        now = [30.0]
+        sleeps = []
+
+        def sleep(delta):
+            sleeps.append(delta)
+            now[0] += delta
+
+        outcome = delivery.wait_for_toggle_stop_modifier_release(
+            expected,
+            read_held_vks=lambda: frozenset((delivery.VK_RMENU, delivery.VK_MENU)),
+            max_wait_sec=0.5,
+            poll_sec=0.01,
+            monotonic=lambda: now[0],
+            sleep=sleep,
+            should_continue=lambda: len(sleeps) < 1,
+        )
+        self.assertEqual(outcome, "aborted")
+        self.assertEqual(len(sleeps), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
