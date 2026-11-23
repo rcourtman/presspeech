@@ -1744,14 +1744,14 @@ td strong {
 @media (min-width: 921px) {
   .table-scroll,
   .table-wrap {
-    max-height: 76vh;
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   .table-scroll thead th,
   .table-wrap thead th {
     position: sticky;
-    top: 0;
+    top: 60px;
     z-index: 2;
     box-shadow: inset 0 -1px 0 var(--line-strong);
   }
@@ -1903,8 +1903,15 @@ td strong {
   }
 
   .hero-brew,
+  .hero p.hero-brew,
   .install-line {
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+    white-space: normal;
+    align-items: baseline;
+  }
+
+  .hero-brew code {
+    overflow-wrap: anywhere;
   }
 
   .nav {
