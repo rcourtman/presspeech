@@ -47,8 +47,7 @@
         <span class="section-eyebrow">Target-app check</span>
         <h1>Test Presspeech with one app</h1>
         <p>Automatic paste depends on the destination and its focus behavior. Use blank disposable fields to check one exact app and version before relying on it for real work. The check records outcomes, never your words.</p>
-        <div class="note warn"><p><strong>Published-build privacy check (26 September 2026):</strong> Current downloads are macOS 0.3.9 and Windows 0.1.12. A clean macOS 0.3.9 install asks before its missing-model download, but an existing install may download on launch; Windows 0.1.12 downloads a missing model on launch. macOS 0.3.9 removes inherited account tokens, though valid proxy settings still route requests. Older macOS 0.3.8 may include an inherited token or log a malformed proxy URL, including embedded credentials; upgrade before another model request. Windows 0.1.12 may send Hugging Face usage telemetry or an available token, with additional routing and proxy risks. Read the <a href="install.html#model-download-privacy">macOS model-download warning</a> or <a href="windows.html#model-download-privacy">Windows model-download warning</a> before launching or triggering a model download. If Windows risks are unclear, wait for 0.1.13 rather than launching solely for this check. If your model is ready, do not reset its cache or switch models for this protocol.</p></div>
-        <div class="note warn"><p><strong>Reporting availability checked 24 September 2026:</strong> <a href="https://github.com/rcourtman/presspeech/issues">GitHub currently restricts new issues</a>. The worksheet can save a local, unmonitored draft; it does not submit a report. Before testing for community feedback, know that you may only be able to comment on a matching open thread. If none accepts your result, keep the draft private and retry when intake reopens. <a href="#share-result">Check the reporting steps</a>.</p></div>
+        <div class="note"><p><strong>Before starting:</strong> if your speech model is not yet installed, review the <a href="install.html#model-download-privacy">macOS</a> or <a href="windows.html#model-download-privacy">Windows</a> model-download privacy guidance first; if your model is already ready, do not reset its cache or switch models for this check. The local worksheet below does not submit anything—it prepares an aggregate block or plain-text draft you can share on GitHub or keep locally.</p></div>
         <div class="actions">
           <a class="button" href="#before-testing">Run the eight checks</a>
           <a class="button secondary" href="#coverage">Choose a useful target</a>
@@ -74,7 +73,7 @@
         </div>
       </section>
 
-      <section id="coverage">
+      <section class="band-tint" id="coverage">
         <div class="wrap">
           <span class="section-eyebrow">Community coverage</span>
           <h2>Choose a useful target</h2>
@@ -96,7 +95,7 @@
               <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Electron%2FChromium%20desktop%20app%22">Browse Electron/Chromium reports &rarr;</a></p>
             </article>
           </div>
-          <div class="note"><p><strong>Especially useful now:</strong> if you use an Electron/Chromium app on macOS, include both the steady-focus checks and a focus change between two windows of that same app. The open <a href="https://github.com/rcourtman/presspeech/issues/33">paste-target validation issue</a> needs evidence that steady focus can paste while a same-process window change still recovers safely. If new issues remain restricted but comments on that issue are available, you can add this exact macOS Electron result there with the eight counts, Presspeech/OS/target-app versions, and generic field type. Otherwise keep the draft private. A community report does not replace native release qualification.</p></div>
+          <div class="note"><p><strong>Especially useful now:</strong> if you use an Electron/Chromium app on macOS, include both the steady-focus checks and a focus change between two windows of that same app. The open <a href="https://github.com/rcourtman/presspeech/issues/33">paste-target validation issue</a> needs evidence that steady focus can paste while a same-process window change still recovers safely. You can add this exact macOS Electron result there with the eight counts, Presspeech/OS/target-app versions, and generic field type, or keep the draft locally if no public route accepts it. A community report does not replace native release qualification.</p></div>
           <div class="note"><p><strong>Thread matching is not evidence pooling.</strong> Use the same issue thread for the same platform, target-app version, and generic field type, even when outcomes differ; open a separate report when one of those boundaries differs. Keep each observation labelled with its exact Presspeech and operating-system versions and relevant conditions. Do not add counts across different versions or conditions or infer a general paste-success rate from self-selected reports. The class links search standardized compatibility-report bodies; older general bug reports are intentionally not counted as completed protocol evidence.</p></div>
         </div>
       </section>
@@ -117,7 +116,7 @@
             <li>
               <strong>Use harmless, distinct phrases</strong>
               <p>Create a different phrase for every attempt so stale or duplicate delivery is visible. Do not use names, credentials, commands, customer data, or text from real work.</p>
-              <details>
+              <details class="disclosure">
                 <summary>Optional eight-phrase prompt</summary>
                 <p>If English suits the selected language hint, use these in order: <strong>amber rabbit one</strong>; <strong>blue otter two</strong>; <strong>copper robin three</strong>; <strong>green badger four</strong>; <strong>ivory falcon five</strong>; <strong>purple fox six</strong>; <strong>silver heron seven</strong>; <strong>yellow turtle eight</strong>. Otherwise use the same colour-animal-number pattern in the test language. Recognition accuracy is not scored; compare the finished target text with the scratch paste. Never add either version to the public report.</p>
               </details>
@@ -138,7 +137,7 @@
         </div>
       </section>
 
-      <section id="steady-focus">
+      <section class="band-tint" id="steady-focus">
         <div class="wrap">
           <span class="section-eyebrow">Checks 1–5</span>
           <h2>Keep the target focused</h2>
@@ -206,7 +205,7 @@
         </div>
       </section>
 
-      <section id="macos-tab-observation">
+      <section class="band-tint" id="macos-tab-observation">
         <div class="wrap">
           <span class="section-eyebrow">Optional macOS observation</span>
           <h2>Check a tab switch separately</h2>
@@ -297,6 +296,7 @@
             <div class="worksheet-results">
               <h3>Aggregate result</h3>
               <p id="worksheet-status" role="status" aria-live="polite">Classify all eight check slots, including any not run.</p>
+              <p class="table-scroll-hint">Scroll sideways to view all columns.</p>
               <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-1">
                 <table>
                   <caption id="table-caption-1">Counts calculated from the selected attempt categories</caption>
@@ -339,14 +339,14 @@
         </div>
       </section>
 
-      <section id="boundaries">
+      <section class="band-tint" id="boundaries">
         <div class="wrap">
           <span class="section-eyebrow">Interpret the result</span>
           <h2>Keep platform boundaries separate</h2>
           <div class="grid two">
             <article class="card">
               <h3>Clipboard behavior</h3>
-              <p>Leave optional macOS clipboard restoration off for this baseline. On macOS 26 or later, enabled macOS Clipboard History in Spotlight can make earlier copies searchable. macOS 0.3.8 can make transcript entries available through macOS Universal Clipboard; builds containing local-only transcript clipboard writes prevent that transfer. Published Windows 0.1.12 does not opt out of Windows clipboard history or cross-device sync. Windows 0.1.13 and later opts its writes out of both Windows services. third-party managers remain a separate local boundary on either platform. Review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a>.</p>
+              <p>Leave optional macOS clipboard restoration off for this baseline. On macOS 26 or later, enabled macOS Clipboard History in Spotlight can make earlier copies searchable. macOS 0.3.8 can make transcript entries available through macOS Universal Clipboard; builds containing local-only transcript clipboard writes prevent that transfer. Published Windows 0.1.12 does not opt out of Windows clipboard history or cross-device sync. Windows 0.1.13 and later opts its writes out of both Windows services. Other third-party managers remain a separate local boundary on either platform. Review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a>.</p>
             </article>
             <article class="card">
               <h3>Elevated Windows apps</h3>
@@ -370,12 +370,11 @@
         <div class="wrap">
           <span class="section-eyebrow">Community evidence</span>
           <h2>Share counts, not content</h2>
-          <div class="note warn"><p><strong>Reporting availability checked 24 September 2026:</strong> GitHub currently reports that issue creation is restricted for this repository. You can still run this protocol and keep a report draft locally, but a new-report link may not accept a submission. Use <strong>Download report draft</strong> above to save the eight counts and classification with blank context prompts, then check for a comparable open report and whether comments are enabled before sharing. Do not post transcripts, clipboard contents, or other private data elsewhere as a workaround.</p></div>
           <ol class="steps">
             <li>
               <strong>Find the same platform, app, version, and field type</strong>
               <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22">Browse existing compatibility reports</a>. When the platform, app version, and generic field type match, add a comment there instead of opening a duplicate—even if your outcome differs. Paste the worksheet block, then add the Presspeech and operating-system versions, generic hardware if useful, and relevant conditions, because variation under comparable conditions is important evidence. Open a separate report for a different platform or field type.</p>
-              <details>
+              <details class="disclosure">
                 <summary>Comment shape for another observation</summary>
                 <pre><code>Presspeech version: [x.y.z]
 Operating-system version: [version]
@@ -392,9 +391,9 @@ anomalies or recovery notices, final scratch comparison; no text or hostnames]</
               </details>
             </li>
             <li>
-              <strong>If GitHub accepts new reports, submit one target-app report</strong>
-              <p>If no matching report exists and GitHub currently accepts submissions, open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and select the same overall result in the form, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results document successful delivery or safe recovery for that exact tested configuration; self-selected reports cannot establish a population success rate. If issue creation is restricted, keep the draft locally and retry later rather than repeatedly opening the blocked form.</p>
-              <p>If issue creation is still restricted and your macOS Electron result directly addresses <a href="https://github.com/rcourtman/presspeech/issues/33">issue #33</a>, you may instead comment there if GitHub permits it. Include the eight counts plus Presspeech, operating-system, and target-app versions and the generic field type. Do not post unrelated results in that thread; retain those drafts privately when no suitable route accepts them.</p>
+              <strong>Submit one target-app report</strong>
+              <p>If no matching report exists, open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and select the same overall result in the form, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results document successful delivery or safe recovery for that exact tested configuration; self-selected reports cannot establish a population success rate. If GitHub intake is unavailable, keep the downloaded draft locally and retry later.</p>
+              <p>If your macOS Electron result directly addresses <a href="https://github.com/rcourtman/presspeech/issues/33">issue #33</a>, you may instead comment there with the eight counts plus Presspeech, operating-system, and target-app versions and the generic field type. Do not post unrelated results in that thread.</p>
               <p>For <strong>Overall result</strong>, a complete automatic-paste pass means all five steady-focus attempts pasted once and all three focus-change attempts recovered safely. Focus-change recovery is expected; choose the manual-recovery option only when it occurred while the original target stayed focused. Any incorrect or unsafe result takes precedence.</p>
             </li>
             <li>

@@ -46,24 +46,22 @@
         <span class="section-eyebrow">FAQ</span>
         <h1>Frequently asked questions</h1>
         <p>Short answers for people and retrieval systems evaluating both the released macOS app and the unsigned Windows prerelease. For the full setup paths, use the <a href="install.html">macOS install guide</a> or <a href="windows.html">Windows install guide</a>.</p>
-        <div class="actions"><a class="button" href="getting-started.html">Complete your first dictation</a></div>
+        <div class="actions">
+          <a class="button" href="getting-started.html">Complete your first dictation</a>
+          <a class="button secondary" href="#privacy">Privacy &amp; permissions</a>
+          <a class="button secondary" href="#workflows">Models &amp; hotkeys</a>
+          <a class="button secondary" href="#delivery">Delivery &amp; compare</a>
+        </div>
       </div>
 
-      <section>
+      <section id="overview">
         <div class="wrap">
-          <h2>Questions and answers</h2>
+          <span class="section-eyebrow">Basics</span>
+          <h2>Overview &amp; installation</h2>
           <div class="grid two">
             <article class="card">
               <h3>What is Presspeech?</h3>
               <p>Free MIT-licensed push-to-talk dictation with separate macOS and Windows apps. Hold a hotkey, speak, and release. Presspeech normally pastes into the window where the recording began; if it cannot verify that destination, it avoids automatic paste. The window check cannot always detect a move to another field or browser tab in the same window, so keep the starting field and tab selected until insertion or recovery. macOS and published Windows 0.1.12 use the clipboard for manual paste; Windows 0.1.13 and later waits for an explicit Delivery Recovery Copy or Discard when delivery is uncertain.</p>
-            </article>
-            <article class="card">
-              <h3>Do upgrades preserve settings and permissions?</h3>
-              <p><strong>macOS:</strong> Saved preferences and local dictionary rules migrate to the current Presspeech identity automatically. An upgrade that changes the bundle identity requires fresh Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring grants; otherwise, check Setup Checklist for any permission that still needs attention. Before reopening 0.3.8 after an upgrade, read the <a href="install.html#upgrade">upgrade launch decision</a>: a missing or invalid model cache can trigger a model request. <strong>Windows:</strong> Installing a newer prerelease over the existing app keeps settings in the current user profile.</p>
-            </article>
-            <article class="card">
-              <h3>Does audio leave my computer?</h3>
-              <p>No. Neither app sends dictation audio to a transcription service. Model files download from Hugging Face during setup, but transcription runs locally and captured audio is discarded from memory after processing.</p>
             </article>
             <article class="card">
               <h3>Which computers are supported?</h3>
@@ -71,39 +69,83 @@
             </article>
             <article class="card">
               <h3>How do I install it?</h3>
-              <p id="faq-macos-install-privacy"><strong>Before installing or launching macOS 0.3.8:</strong> its model-download requests may include a Hugging Face token inherited by Presspeech, although the public model needs no account token. FluidAudio also honors an inherited lowercase <code>https_proxy</code>; a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If a token may be present in the environment that launches Presspeech, the trust of a TLS-inspecting proxy is unclear, or you are unsure, choose macOS 0.3.9 after reviewing its launch decision. Dictation audio and transcripts are not sent. See the <a href="install.html#model-download-privacy">release-specific warning</a> and <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
-              <p id="faq-windows-install-privacy"><strong>Before installing or launching Windows 0.1.12:</strong> its model downloads may send Hugging Face usage telemetry and include an available token; custom routing can change where the token goes. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. 0.1.13 and later removes account-token authentication but still honors proxy and CA settings. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use. If you prefer to avoid this possible usage telemetry, are concerned that a token or custom route may be configured, or are unsure, choose Windows 0.1.13 or later. Dictation audio and transcripts are not sent. See the <a href="windows.html#model-download-privacy">release-specific warning</a> and <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
-              <p id="faq-safe-stopping-point"><strong>Safe stopping point:</strong> Downloading or installing either build without opening Presspeech does not start a model request. If you choose to wait, leave the app unopened. On Windows, the installer's final <strong>Launch Presspeech</strong> option starts checked; clear it before choosing <strong>Finish</strong>. If you already installed Presspeech, follow the <a href="getting-started.html#model-download-preflight">existing-install wait steps</a> to quit it and disable automatic launch. Check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases in a browser</a> for a newer build rather than opening the old app to check for updates. macOS 0.3.9 is published; Windows 0.1.13 is not yet published.</p>
+              <details class="disclosure">
+                <summary>Older builds (macOS 0.3.8 &amp; Windows 0.1.12) &amp; safe stopping point</summary>
+                <p id="faq-macos-install-privacy"><strong>Before installing or launching macOS 0.3.8:</strong> its model-download requests may include a Hugging Face token inherited by Presspeech, although the public model needs no account token. FluidAudio also honors an inherited lowercase <code>https_proxy</code>; a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If a token may be present in the environment that launches Presspeech, the trust of a TLS-inspecting proxy is unclear, or you are unsure, choose macOS 0.3.9 after reviewing its launch decision. Dictation audio and transcripts are not sent. See the <a href="install.html#model-download-privacy">release-specific warning</a> and <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+                <p id="faq-windows-install-privacy"><strong>Before installing or launching Windows 0.1.12:</strong> its model downloads may send Hugging Face usage telemetry and include an available token; custom routing can change where the token goes. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. 0.1.13 and later removes account-token authentication but still honors proxy and CA settings. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use. If you prefer to avoid this possible usage telemetry, are concerned that a token or custom route may be configured, or are unsure, choose Windows 0.1.13 or later. Dictation audio and transcripts are not sent. See the <a href="windows.html#model-download-privacy">release-specific warning</a> and <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+                <p id="faq-safe-stopping-point"><strong>Safe stopping point:</strong> Downloading or installing either build without opening Presspeech does not start a model request. If you choose to wait, leave the app unopened. On Windows, the installer's final <strong>Launch Presspeech</strong> option starts checked; clear it before choosing <strong>Finish</strong>. If you already installed Presspeech, follow the <a href="getting-started.html#model-download-preflight">existing-install wait steps</a> to quit it and disable automatic launch. Check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases in a browser</a> for a newer build rather than opening the old app to check for updates. macOS 0.3.9 is published; Windows 0.1.13 is not yet published.</p>
+              </details>
               <p><strong>macOS:</strong> Review the <a href="install.html#model-download-privacy">current model-download privacy decision</a> before following the direct-download or Homebrew steps in the <a href="install.html">macOS install guide</a>. <strong>Windows:</strong> Follow the <a href="windows.html#download-verify-run">download and SHA-256 verification steps</a> before running the currently unsigned installer.</p>
             </article>
             <article class="card">
-              <h3>What model does it use?</h3>
-              <p><strong>macOS:</strong> FluidAudio with multilingual Parakeet TDT v3 CoreML on the Apple Neural Engine. <strong>Windows:</strong> Fresh PCs with usable NVIDIA CUDA select multilingual Parakeet TDT v3; CPU-only PCs select the smaller English-only Whisper base.en model. Other local Windows models remain selectable.</p>
+              <h3>Why does first launch take time?</h3>
+              <p>Each app must download and prepare a local speech model before the first dictation. The macOS cache is about 500–600 MB. The 0.3.8 release starts its first download on launch; in macOS 0.3.9 and later, clean installs must choose <strong>Download Model</strong> in Setup or choose Set Up Later to defer. Existing installations and cached models load automatically. The optional Parakeet Ultra model in macOS 0.3.10 and later adds about 630 MB, downloaded only after you choose it. A fresh Windows install needs about 2.5 GB for CUDA Parakeet or about 141 MiB for CPU Whisper. Published Windows 0.1.12 starts its selected model download on first launch; 0.1.13 and later asks before downloading either missing first-run default and offers deferral on both paths, plus the CPU model on the Parakeet path. Later launches reuse the cache.</p>
             </article>
             <article class="card">
-              <h3>Does the macOS Language Hint force a language?</h3>
-              <p>No. Auto-detect (the default) leaves the decoder unrestricted. Selecting a language biases decoding toward its script and can reduce wrong-script output, but it does not translate speech or guarantee that the spoken language is identified correctly. Presspeech does not report a detected language.</p>
+              <h3>How do I test my first dictation?</h3>
+              <p>Before opening a build with a missing model, read the <a href="getting-started.html">first-dictation guide</a>'s launch decision for your platform. After setup reports Ready, use <strong>Try Dictation</strong> with harmless words in its focused scratchpad. That in-app result does not prove paste works in another app. Next, try a blank TextEdit or Notepad field: count automatic paste only if complete text appears once with no recovery notice. A copied notice is manual recovery, not an automatic-paste pass; check the field and clipboard before pasting. <a href="app-compatibility.html">Run the repeated target-app check</a> in disposable fields before relying on another app.</p>
             </article>
             <article class="card">
-              <h3>Is it a file transcription app?</h3>
-              <p>No. Presspeech is focused on live push-to-talk dictation into the app you are already using.</p>
+              <h3>Do upgrades preserve settings and permissions?</h3>
+              <p><strong>macOS:</strong> Saved preferences and local dictionary rules migrate to the current Presspeech identity automatically. An upgrade that changes the bundle identity requires fresh Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring grants; otherwise, check Setup Checklist for any permission that still needs attention. Before reopening 0.3.8 after an upgrade, read the <a href="install.html#upgrade">upgrade launch decision</a>: a missing or invalid model cache can trigger a model request. <strong>Windows:</strong> Installing a newer prerelease over the existing app keeps settings in the current user profile.</p>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="band-tint" id="privacy">
+        <div class="wrap">
+          <span class="section-eyebrow">Privacy &amp; system access</span>
+          <h2>Privacy, permissions &amp; clipboard</h2>
+          <div class="grid two">
             <article class="card">
-              <h3>Does it keep a history?</h3>
-              <p><strong>macOS:</strong> The default is the last five transcripts in memory; the setting can keep none, one, or five, and everything clears on quit. <strong>Windows:</strong> There is no transcript history. Neither app writes transcript text to logs.</p>
+              <h3>Does audio leave my computer?</h3>
+              <p>No. Neither app sends dictation audio to a transcription service. Model files download from Hugging Face during setup, but transcription runs locally and captured audio is discarded from memory after processing.</p>
             </article>
             <article class="card">
               <h3>What permissions are required?</h3>
               <p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. Accessibility can control the Mac; Input Monitoring can expose typed keys across apps. Presspeech uses these grants for destination checks, paste, and hotkey detection, but the system grants are broader than those uses. Review the <a href="install.html#permissions">permission scope and Apple's guidance</a> before granting them. <strong>Windows:</strong> Turn on Microphone access, Let apps access your microphone, and Let desktop apps access your microphone. Standard Windows builds use these shared controls for desktop apps; <a href="https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26340-9233">some Insider Experimental builds add per-app controls and first-access prompts</a>. If prompted, identify the requesting app before allowing it; an Unsigned label alone is not proof of Presspeech. Published 0.1.12 checks the microphone automatically during Setup, while 0.1.13 and later checks it only when you choose Check Microphone.</p>
             </article>
             <article class="card">
+              <h3>Does it keep a history?</h3>
+              <p><strong>macOS:</strong> The default is the last five transcripts in memory; the setting can keep none, one, or five, and everything clears on quit. <strong>Windows:</strong> There is no transcript history. Neither app writes transcript text to logs.</p>
+            </article>
+            <article class="card">
+              <h3>Can a clipboard service retain transcripts?</h3>
+              <p>Yes. Presspeech does not sync transcripts itself, but delivery writes finished text to the system clipboard. macOS 0.3.8 can expose transcript entries to macOS Universal Clipboard. Builds containing local-only transcript clipboard writes use the current-device-only pasteboard option and standard transient, auto-generated, and concealed markers, preserving local Command-V while preventing Universal Clipboard transfer and asking cooperating managers not to archive or visibly expose the item. Apple’s Screen Sharing shared clipboard is a separate remote-transfer feature; local-only transcript writes have not been tested as a control for it. macOS Clipboard History in Spotlight on macOS 26 or later, arbitrary local clipboard readers, Windows clipboard services in published 0.1.12, or third-party software that ignores those advisory markers remain separate boundaries. Windows 0.1.13 and later asks Windows to exclude Presspeech items from Clipboard History and Cloud Clipboard, but the current clipboard remains readable by local software. Review the <a href="privacy.html">clipboard privacy boundary</a> before sensitive dictation.</p>
+            </article>
+            <article class="card">
+              <h3>What is in diagnostics?</h3>
+              <p>macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe reports with app, model, microphone availability, settings, and update state. They omit transcript text, audio, dictionary contents, exact microphone names, raw error details, and raw log lines; review the separate local log before sharing any part of it.</p>
+            </article>
+            <article class="card">
               <h3>How do updates work?</h3>
               <p>Both apps can read public GitHub release metadata without sending a version, device, or user identifier. The macOS app checks every six hours. Windows checks on startup when automatic checks are enabled and 24 hours have passed since the recorded check. Published Windows 0.1.12 can repeat a failed check on each restart; 0.1.13 and later counts failed attempts toward that 24-hour interval. You can retry manually from the tray menu. Nothing downloads or installs without approval; Windows also verifies the installer size and SHA-256 before offering to run it.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="workflows">
+        <div class="wrap">
+          <span class="section-eyebrow">Day-to-day use</span>
+          <h2>Models, hotkeys &amp; workflows</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>What model does it use?</h3>
+              <p><strong>macOS:</strong> FluidAudio with multilingual Parakeet TDT v3 CoreML on the Apple Neural Engine. <strong>Windows:</strong> Fresh PCs with usable NVIDIA CUDA select multilingual Parakeet TDT v3; CPU-only PCs select the smaller English-only Whisper base.en model. Other local Windows models remain selectable.</p>
+            </article>
+            <article class="card">
+              <h3>Which speech model should I use?</h3>
+              <p><strong>macOS:</strong> Keep the default Parakeet TDT v3 model; through 0.3.9 it is the only model. From macOS 0.3.10, <strong>Settings → Dictation → Speech Model</strong> also offers opt-in Parakeet Ultra, a post-trained v3 with the same 25 languages and lower word error rates in FluidAudio’s published benchmarks. Choosing it downloads about 630 MB from Hugging Face after a confirmation and verifies every file before use. Parakeet TDT v3 stays on disk, so switching back needs no download. <strong>Windows:</strong> Keep the automatically selected Parakeet CUDA or Whisper CPU default unless another selectable local model is a better fit for your language, accuracy, speed, or hardware.</p>
+            </article>
+            <article class="card">
+              <h3>Does the macOS Language Hint force a language?</h3>
+              <p>No. Auto-detect (the default) leaves the decoder unrestricted. Selecting a language biases decoding toward its script and can reduce wrong-script output, but it does not translate speech or guarantee that the spoken language is identified correctly. Presspeech does not report a detected language.</p>
             </article>
             <article class="card">
               <h3>Can I change the hotkey?</h3>
               <p>Yes. <strong>macOS:</strong> Choose a right-side modifier or F-key, or record a key with Command, Control or Option (plus optional Shift). The recorder previews the combination before saving it. Custom combinations take precedence over the same shortcut in other apps, and conflicts cannot all be detected. When <strong>Show in Dock</strong> is enabled, Presspeech's standard Command-comma Settings command takes precedence while Presspeech is active. Escape stays reserved for cancellation; the active layout's Command-V stays available for Paste recovery, even if a saved hotkey becomes that chord after an input-source change. Apple keyboards may require Fn for an F-key. Right Option is the default. <strong>Windows:</strong> Choose a left/right modifier or F8–F12; Right Alt is the default, but an AltGr keyboard layout should use F8 or another key.</p>
-
             </article>
             <article class="card">
               <h3>Does it support voice shortcuts and formatting commands?</h3>
@@ -113,9 +155,18 @@
               <h3>Does Dictionary &amp; Shortcuts teach the speech model?</h3>
               <p>No. Dictionary rules run after local transcription and replace the exact saved mishearing or spoken phrase. They do not bias the decoder or learn related spellings and grammatical forms, so add a separate rule for each distinct output that needs correction. Rules stay local; macOS can also export, import, or keep them in a user-chosen sync file.</p>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="band-tint" id="delivery">
+        <div class="wrap">
+          <span class="section-eyebrow">Scope &amp; fit</span>
+          <h2>Delivery, scope &amp; comparisons</h2>
+          <div class="grid two">
             <article class="card">
-              <h3>How do I test my first dictation?</h3>
-              <p>Before opening a build with a missing model, read the <a href="getting-started.html">first-dictation guide</a>'s launch decision for your platform. After setup reports Ready, use <strong>Try Dictation</strong> with harmless words in its focused scratchpad. That in-app result does not prove paste works in another app. Next, try a blank TextEdit or Notepad field: count automatic paste only if complete text appears once with no recovery notice. A copied notice is manual recovery, not an automatic-paste pass; check the field and clipboard before pasting. <a href="app-compatibility.html">Run the repeated target-app check</a> in disposable fields before relying on another app.</p>
+              <h3>Is it a file transcription app?</h3>
+              <p>No. Presspeech is focused on live push-to-talk dictation into the app you are already using.</p>
             </article>
             <article class="card">
               <h3>Can I dictate into a command shell?</h3>
@@ -124,22 +175,6 @@
             <article class="card">
               <h3>Why was the transcript not pasted?</h3>
               <p>Presspeech avoids automatic paste when it cannot verify the same destination it captured at the start. If the macOS 0.3.8 release says <strong>Copied — press ⌘V to paste</strong> (or <strong>Can’t verify window — use ⌘V</strong> for a missing starting window), it copied the transcript when dictation completed. Revised builds say <strong>⌘V if clipboard unchanged</strong>. A later copy can replace that transcript, so use <strong>Copy Last Transcript</strong> if available rather than pasting newer clipboard content. Published Windows 0.1.12 says <strong>Transcript copied, not pasted</strong>; paste manually only if the clipboard still holds it. Windows 0.1.13 and later may leave the previous clipboard item unchanged: check the intended field, then use <strong>Delivery Recovery → Copy for Manual Paste</strong> or Discard; do not blindly paste the previous clipboard item. Causes include a focus change, unavailable focused-window information, and—on Windows—a target running as administrator. The <a href="troubleshooting.html#macos-paste">Mac</a> and <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps explain the platform details; the <a href="app-compatibility.html">target-app check</a> records repeatable results without publishing your text.</p>
-            </article>
-            <article class="card">
-              <h3>Can a clipboard service retain transcripts?</h3>
-              <p>Yes. Presspeech does not sync transcripts itself, but delivery writes finished text to the system clipboard. macOS 0.3.8 can expose transcript entries to macOS Universal Clipboard. Builds containing local-only transcript clipboard writes use the current-device-only pasteboard option and standard transient, auto-generated, and concealed markers, preserving local Command-V while preventing Universal Clipboard transfer and asking cooperating managers not to archive or visibly expose the item. Apple’s Screen Sharing shared clipboard is a separate remote-transfer feature; local-only transcript writes have not been tested as a control for it. macOS Clipboard History in Spotlight on macOS 26 or later, arbitrary local clipboard readers, Windows clipboard services in published 0.1.12, or third-party software that ignores those advisory markers remain separate boundaries. Windows 0.1.13 and later asks Windows to exclude Presspeech items from Clipboard History and Cloud Clipboard, but the current clipboard remains readable by local software. Review the <a href="privacy.html">clipboard privacy boundary</a> before sensitive dictation.</p>
-            </article>
-            <article class="card">
-              <h3>Why does first launch take time?</h3>
-              <p>Each app must download and prepare a local speech model before the first dictation. The macOS cache is about 500–600 MB. The 0.3.8 release starts its first download on launch; in macOS 0.3.9 and later, clean installs must choose <strong>Download Model</strong> in Setup or choose Set Up Later to defer. Existing installations and cached models load automatically. The optional Parakeet Ultra model in macOS 0.3.10 and later adds about 630 MB, downloaded only after you choose it. A fresh Windows install needs about 2.5 GB for CUDA Parakeet or about 141 MiB for CPU Whisper. Published Windows 0.1.12 starts its selected model download on first launch; 0.1.13 and later asks before downloading either missing first-run default and offers deferral on both paths, plus the CPU model on the Parakeet path. Later launches reuse the cache.</p>
-            </article>
-            <article class="card">
-              <h3>What is in diagnostics?</h3>
-              <p>macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe reports with app, model, microphone availability, settings, and update state. They omit transcript text, audio, dictionary contents, exact microphone names, raw error details, and raw log lines; review the separate local log before sharing any part of it.</p>
-            </article>
-            <article class="card">
-              <h3>Which speech model should I use?</h3>
-              <p><strong>macOS:</strong> Keep the default Parakeet TDT v3 model; through 0.3.9 it is the only model. From macOS 0.3.10, <strong>Settings → Dictation → Speech Model</strong> also offers opt-in Parakeet Ultra, a post-trained v3 with the same 25 languages and lower word error rates in FluidAudio’s published benchmarks. Choosing it downloads about 630 MB from Hugging Face after a confirmation and verifies every file before use. Parakeet TDT v3 stays on disk, so switching back needs no download. <strong>Windows:</strong> Keep the automatically selected Parakeet CUDA or Whisper CPU default unless another selectable local model is a better fit for your language, accuracy, speed, or hardware.</p>
             </article>
             <article class="card">
               <h3>How does it compare to other dictation apps?</h3>

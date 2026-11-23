@@ -76,7 +76,7 @@
         </div>
       </section>
 
-      <section id="macos">
+      <section class="band-tint" id="macos">
         <div class="wrap">
           <span class="section-eyebrow">macOS</span>
           <h2>Recover the released Mac app</h2>
@@ -150,13 +150,13 @@
               <p>Click the destination text field before pressing the hotkey and keep that window focused until transcription finishes. In published Windows 0.1.12, <strong>Transcript copied, not pasted</strong> means the finished transcript was copied at completion. Check the intended field first, then press <strong>Ctrl+V</strong> only if the clipboard still holds the complete transcript; a later copy can replace it without changing the notice. If unsure, check it in a blank, disposable text field before pasting into the intended field. If it has changed, do not paste the newer item as your dictation.</p>
               <p>This fallback is used when focus changed, the original window could not be identified, or the target is running as administrator. Reopen an elevated target normally when possible; do not run Presspeech as administrator as a workaround. 0.1.13 and later instead retains uncertain dictation for an explicit Delivery Recovery Copy or Discard; an already-known missing, unfocused, or elevated target does not replace the previous clipboard item. Use the <a href="app-compatibility.html">target-app check</a> to classify repeatable behavior safely.</p>
             </article>
-          <article class="card" id="windows-delivery-recovery">
-            <h3>Windows delivery recovery in 0.1.13 and later</h3>
-            <p>These controls are not included in Windows 0.1.12. Builds containing the new recovery actions keep a finished dictation in memory when clipboard access fails, a newer copy replaces it before paste, the original target cannot be used, or keyboard delivery becomes uncertain. If Windows cannot provide the target app's executable name, Presspeech also retains the dictation without replacing the prior clipboard item rather than guessing a local or remote paste route. New recording waits for review.</p>
-            <p>Check the intended field first: an input error can occur after a paste. The keyboard-accessible <strong>Delivery Recovery</strong> window opens without showing or copying the dictated words. Choose <strong>Copy for Manual Paste</strong> to copy explicitly, <strong>Discard Dictation</strong> to forget the recovery copy without changing the clipboard, or <strong>Leave Waiting</strong> to close the window while recording remains paused. Copy replaces the current clipboard item, including an image or formatted copy, and Presspeech does not restore it; choose Leave Waiting if you need to save that item first. A blocked hotkey or reopening Presspeech brings the window back; neither action copies automatically. Equivalent <strong>Review Undelivered Dictation…</strong>, <strong>Copy Undelivered Dictation (replaces clipboard)</strong>, and <strong>Discard Undelivered Dictation</strong> commands remain in the notification-area menu.</p>
-            <p>Depending on where delivery became uncertain, some or all text may already be in the field or on the clipboard. If the clipboard changes during recovery, Presspeech keeps its recovery copy in process memory for another deliberate Copy or Discard. Exit forgets it. Sequence checks do not make the paste atomic or acknowledge that another application consumed the text.</p>
-            <p>Every 0.1.13 dictation clipboard item is marked for exclusion from Windows Clipboard History and Cloud Clipboard before transcript text is published. This does not remove the current item: deliberate Ctrl+V still works, and other local software or a third-party clipboard manager can still read it.</p>
-          </article>
+            <article class="card" id="windows-delivery-recovery">
+              <h3>Windows delivery recovery in 0.1.13 and later</h3>
+              <p>These controls are not included in Windows 0.1.12. Builds containing the new recovery actions keep a finished dictation in memory when clipboard access fails, a newer copy replaces it before paste, the original target cannot be used, or keyboard delivery becomes uncertain. If Windows cannot provide the target app's executable name, Presspeech also retains the dictation without replacing the prior clipboard item rather than guessing a local or remote paste route. New recording waits for review.</p>
+              <p>Check the intended field first: an input error can occur after a paste. The keyboard-accessible <strong>Delivery Recovery</strong> window opens without showing or copying the dictated words. Choose <strong>Copy for Manual Paste</strong> to copy explicitly, <strong>Discard Dictation</strong> to forget the recovery copy without changing the clipboard, or <strong>Leave Waiting</strong> to close the window while recording remains paused. Copy replaces the current clipboard item, including an image or formatted copy, and Presspeech does not restore it; choose Leave Waiting if you need to save that item first. A blocked hotkey or reopening Presspeech brings the window back; neither action copies automatically. Equivalent <strong>Review Undelivered Dictation…</strong>, <strong>Copy Undelivered Dictation (replaces clipboard)</strong>, and <strong>Discard Undelivered Dictation</strong> commands remain in the notification-area menu.</p>
+              <p>Depending on where delivery became uncertain, some or all text may already be in the field or on the clipboard. If the clipboard changes during recovery, Presspeech keeps its recovery copy in process memory for another deliberate Copy or Discard. Exit forgets it. Sequence checks do not make the paste atomic or acknowledge that another application consumed the text.</p>
+              <p>Every 0.1.13 dictation clipboard item is marked for exclusion from Windows Clipboard History and Cloud Clipboard before transcript text is published. This does not remove the current item: deliberate Ctrl+V still works, and other local software or a third-party clipboard manager can still read it.</p>
+            </article>
             <article class="card" id="windows-muted">
               <h3>Playback stays muted</h3>
               <p>Unmute the affected output from Windows Quick Settings or <strong>Settings → System → Sound</strong>, then reopen Presspeech. Recordings normally restore each playback device to its previous mute state, including when the configured maximum length stops a recording. Copy diagnostics if the state is not restored.</p>
@@ -169,7 +169,7 @@
         </div>
       </section>
 
-      <section id="report">
+      <section class="band-tint" id="report">
         <div class="wrap">
           <span class="section-eyebrow">Still stuck?</span>
           <h2>Report the problem without reporting your words</h2>
@@ -183,17 +183,16 @@
               <p>Include short reproduction steps, the affected platform and version, whether the model reached ready, and whether Try Dictation worked. For Windows model failures, include CPU, GPU, and driver details when available.</p>
             </li>
             <li>
-              <strong>Use the support guide; submit only when GitHub allows it</strong>
-              <p><strong>Report a Problem…</strong> in Presspeech opens the <a href="https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md">support guide</a>; it does not submit a report or attach diagnostics. Follow the guide to check for a usable public route and keep your draft private while new issue creation is restricted. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private vulnerability-reporting form</a> for a security issue.</p>
+              <strong>Use the support guide</strong>
+              <p><strong>Report a Problem…</strong> in Presspeech opens the <a href="https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md">support guide</a>; it does not submit a report or attach diagnostics. Follow the guide to check for an existing thread or open an issue on GitHub, or keep your draft private locally if no public route is available. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private vulnerability-reporting form</a> for a security issue.</p>
             </li>
           </ol>
-          <div class="note warn"><p><strong>Feedback availability checked 23 September 2026:</strong> GitHub currently reports that issue creation is restricted for this repository, so a new public bug report cannot be submitted there. Check for a matching issue and whether comments are available. If there is no usable public route, keep a draft locally and retry later; do not post private data elsewhere as a workaround.</p></div>
-          <details>
+          <details class="disclosure">
             <summary>What to save in a private report draft</summary>
             <p>Keep only details useful for reproduction; this draft is not sent or monitored. Record the Presspeech and operating-system versions, affected stage, expected and observed result, smallest safe reproduction steps or frequency, generic target-app context if relevant, recovery tried and whether it worked, and attempt/failure counts. For text delivery, use harmless test text and record only whether complete text was recovered—never save or share the phrase itself. Keep diagnostics private until reviewed; do not include audio, transcripts, raw logs, credentials, private paths, or identifying names.</p>
           </details>
           <div class="note warn"><p><strong>GitHub issues are public.</strong> Diagnostics omit transcript text, audio, dictionary contents, exact microphone names, raw error details, and raw log lines. Review the separate local log before sharing any excerpt because device labels and errors can contain private names or paths. Do not add dictated text, audio, references, dictionary or shortcut contents, credentials, or other private data yourself.</p></div>
-          <p>If the problem is specific to automatic paste in one app and can be repeated safely, follow the <a href="app-compatibility.html">eight-attempt target-app protocol</a> and share only aggregate outcomes. When issue creation is available, use the general bug form if repeating the behavior would be unsafe; otherwise keep the draft local.</p>
+          <p>If the problem is specific to automatic paste in one app and can be repeated safely, follow the <a href="app-compatibility.html">eight-attempt target-app protocol</a> and share only aggregate outcomes. Use the general bug form if repeating the behavior would be unsafe.</p>
           <p class="quiet">Prefer plain text? The repository also keeps a concise <a href="troubleshooting.md">Markdown recovery reference</a>.</p>
         </div>
       </section>
