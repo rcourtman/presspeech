@@ -13792,17 +13792,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         editMenu.addItem(redo)
         editMenu.addItem(.separator())
         editMenu.addItem(responderChainMenuItem(title: "Cut",
-                                                action: Selector(("cut:")),
+                                                action: #selector(NSText.cut(_:)),
                                                 keyEquivalent: "x"))
         editMenu.addItem(responderChainMenuItem(title: "Copy",
-                                                action: Selector(("copy:")),
+                                                action: #selector(NSText.copy(_:)),
                                                 keyEquivalent: "c"))
         editMenu.addItem(responderChainMenuItem(title: "Paste",
-                                                action: Selector(("paste:")),
+                                                action: #selector(NSText.paste(_:)),
                                                 keyEquivalent: "v"))
         editMenu.addItem(.separator())
         editMenu.addItem(responderChainMenuItem(title: "Select All",
-                                                action: Selector(("selectAll:")),
+                                                action: #selector(NSText.selectAll(_:)),
                                                 keyEquivalent: "a"))
         editItem.submenu = editMenu
         mainMenu.addItem(editItem)
@@ -25797,11 +25797,22 @@ private enum PresspeechSelfTest {
         try expect(speechModelCacheIsComplete(at: fixtureCache),
                    equals: false,
                    "a directory left by an interrupted download must not bypass consent")
+        let fixtureMIL = Data("""
+        program(1.3) {
+            func main() {
+                tensor<fp16, [1]> w = const()[val = tensor<fp16, [1]>(BLOBFILE(path = string("@model_path/weights/weight.bin"), offset = uint64(64)))];
+            }
+        }
+        """.utf8)
         for name in ["Preprocessor.mlmodelc", "Encoder.mlmodelc",
                      "Decoder.mlmodelc", "JointDecisionv3.mlmodelc"] {
-            try FileManager.default.createDirectory(
-                at: fixtureCache.appendingPathComponent(name, isDirectory: true),
-                withIntermediateDirectories: true)
+            let bundle = fixtureCache.appendingPathComponent(name, isDirectory: true)
+            let weightsDir = bundle.appendingPathComponent("weights", isDirectory: true)
+            try FileManager.default.createDirectory(at: weightsDir,
+                                                    withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: bundle.appendingPathComponent("coremldata.bin"))
+            try fixtureMIL.write(to: bundle.appendingPathComponent("model.mil"))
+            try Data("w".utf8).write(to: weightsDir.appendingPathComponent("weight.bin"))
         }
         try expect(speechModelCacheIsComplete(at: fixtureCache),
                    equals: false,
@@ -25811,6 +25822,16 @@ private enum PresspeechSelfTest {
         try expect(speechModelCacheIsComplete(at: fixtureCache),
                    equals: true,
                    "a complete preinstalled model may load without network approval")
+        let fixtureEncoderWeights = fixtureCache
+            .appendingPathComponent("Encoder.mlmodelc/weights/weight.bin")
+        try FileManager.default.removeItem(at: fixtureEncoderWeights)
+        try expect(speechModelCacheIsComplete(at: fixtureCache),
+                   equals: false,
+                   "a compiled bundle missing its referenced weights must not bypass consent")
+        try Data("w".utf8).write(to: fixtureEncoderWeights)
+        try expect(speechModelCacheIsComplete(at: fixtureCache),
+                   equals: true,
+                   "restoring missing bundle weights should restore cache completeness")
         try FileManager.default.removeItem(at: fixtureVocabulary)
         try expect(speechModelCacheIsComplete(at: fixtureCache),
                    equals: false,

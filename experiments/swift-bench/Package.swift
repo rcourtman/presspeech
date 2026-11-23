@@ -48,7 +48,7 @@ let package = Package(
         // Must match swift/Package.swift; dependency-provenance.py compares
         // the commits both Package.resolved files record.
         .package(url: "https://github.com/FluidInference/FluidAudio.git",
-                 exact: "0.17.7"),
+                 exact: "0.18.4"),
     ],
     targets: [
         .executableTarget(
