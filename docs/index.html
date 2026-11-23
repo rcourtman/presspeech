@@ -23,6 +23,7 @@
     <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
     <link rel="stylesheet" href="styles.css">
     <script src="site-navigation.js" defer></script>
+    <script src="hero-demo.js" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -149,15 +150,68 @@
           <p class="hero-privacy-line">Clean installs ask before downloading the local ~600 MB speech model. Dictation audio and transcripts stay on your machine. <a href="privacy.html#network-calls">Review every network call</a>.</p>
         </div>
         <div class="hero-visual">
-          <div class="hero-demo">
-            <figure class="hero-demo-figure">
-              <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release, and Presspeech pastes the local transcript into TextEdit." aria-describedby="demo-video-description">
-                <source src="demo-video.webm" type="video/webm">
-                <source src="demo-video.mp4" type="video/mp4">
-                <p>Your browser cannot play the demo video. Hold Right Option, speak, and release to transcribe locally and paste into the focused window, or recover manually from the clipboard if focus changed.</p>
-              </video>
-              <figcaption class="hero-demo__caption demo-figure__caption" id="demo-video-description"><strong>Silent walkthrough:</strong> Hold Right Option, speak, and release. After local transcription, Presspeech pastes into the focused TextEdit window or keeps the transcript ready for manual recovery if focus changed.</figcaption>
-            </figure>
+          <div class="hero-demo" data-hero-demo data-state="idle">
+            <div class="sim-frame" data-demo-stage aria-label="Interactive walkthrough of Presspeech recording and pasting into Notes">
+              <div class="sim-menubar" aria-hidden="true">
+                <div class="sim-menubar__left">
+                  <span class="sim-menubar__app">Notes</span>
+                  <span>File</span>
+                  <span>Edit</span>
+                  <span>Format</span>
+                </div>
+                <div class="sim-menubar__right">
+                  <span class="sim-menubar__mic" data-demo-mic data-recording="false" title="Presspeech menu-bar icon">
+                    <svg viewBox="0 0 100 100" width="14" height="14" aria-hidden="true">
+                      <rect x="35" y="10" width="30" height="55" rx="15" fill="currentColor"/>
+                      <rect x="48.5" y="65" width="3" height="15" fill="currentColor"/>
+                      <rect x="22" y="80" width="56" height="6" rx="3" fill="currentColor"/>
+                    </svg>
+                  </span>
+                  <span class="sim-menubar__time">Tue 9:41</span>
+                </div>
+              </div>
+
+              <div class="sim-desktop">
+                <div class="sim-window">
+                  <div class="sim-window__chrome" aria-hidden="true">
+                    <span class="sim-dot sim-dot--red"></span>
+                    <span class="sim-dot sim-dot--yellow"></span>
+                    <span class="sim-dot sim-dot--green"></span>
+                    <span class="sim-window__title">Friday standup</span>
+                  </div>
+                  <div class="sim-window__body">
+                    <p class="sim-note-heading">Friday standup</p>
+                    <p class="sim-note-line"><span class="sim-bullet" aria-hidden="true">•</span> Demo the notarised macOS build</p>
+                    <p class="sim-note-line sim-note-line--active">
+                      <span class="sim-bullet" aria-hidden="true">•</span>
+                      <span class="sim-transcript" data-demo-transcript>This sentence was spoken, not typed.</span><span class="sim-caret" data-demo-caret aria-hidden="true"></span>
+                      <span class="sim-speed" data-demo-speed>~100 ms</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div class="sim-hud" data-demo-hud data-mode="idle" aria-hidden="true">
+                  <span class="sim-hud__dot"></span>
+                  <span class="sim-hud__wave">
+                    <i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i>
+                    <i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i>
+                    <i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i>
+                    <i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i><i data-demo-bar></i>
+                  </span>
+                  <span class="sim-hud__cancel">Esc cancel</span>
+                  <span class="sim-hud__transcribing">Transcribing...</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="sim-controls">
+              <button type="button" class="sim-keycap" data-demo-hold aria-pressed="false">
+                <span class="sim-keycap__glyph" aria-hidden="true">⌥</span>
+                <span>Hold Right Option</span>
+              </button>
+              <span class="sim-status" data-demo-status role="status" aria-live="polite">Hold Right Option to speak</span>
+              <button type="button" class="sim-replay" data-demo-replay>Replay</button>
+            </div>
           </div>
         </div>
       </div>

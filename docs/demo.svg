@@ -1,158 +1,167 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" font-family="-apple-system, system-ui, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>Hold Right Option, speak, release — the sentence quickly lands at your cursor.</title>
+  <title>Hold Right Option, speak, release. Presspeech shows its floating recording pill, transcribes locally, and pastes the sentence at your cursor.</title>
 
-  <!-- Timeline (6.5 s loop): idle 0.5 s · press · speak 2.4 s · release ·
-       text lands quickly · rest ~3.2 s · reset -->
-
-  <!-- Background -->
-  <rect width="1000" height="500" fill="#FAF8F2"/>
+  <!-- Timeline (6.8 s loop):
+       0.00 - 0.10 idle
+       0.10 - 0.45 holding Right Option (menu bar mic red, charcoal HUD pill with red dot + animated red waveform + Esc cancel)
+       0.45 - 0.50 releasing (brief blue dot + Transcribing... beat)
+       0.50 - 0.95 HUD disappears, complete sentence lands at cursor with ~100 ms badge
+       0.95 - 1.00 fade reset -->
 
   <defs>
-    <filter id="soft" x="-20%" y="-20%" width="140%" height="160%">
-      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.10"/>
+    <linearGradient id="desk" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F2EEE6"/>
+      <stop offset="100%" stop-color="#E4DFD4"/>
+    </linearGradient>
+    <filter id="winShadow" x="-15%" y="-15%" width="130%" height="145%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#18201D" flood-opacity="0.11"/>
     </filter>
-
-    <!-- Left-to-right reveal of the live caption while "speaking" -->
-    <clipPath id="captionClip">
-      <rect x="446" y="344" width="0" height="36">
-        <animate attributeName="width" values="0;0;292;292" keyTimes="0;0.10;0.43;1" dur="6.5s" repeatCount="indefinite"/>
-      </rect>
-    </clipPath>
+    <filter id="hudShadow" x="-20%" y="-30%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
   </defs>
 
-  <!-- ====================================================== -->
-  <!-- The document window — where the transcript will land   -->
-  <!-- ====================================================== -->
-  <g filter="url(#soft)">
-    <rect x="150" y="48" width="700" height="230" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+  <!-- Outer desktop canvas -->
+  <rect width="1000" height="500" rx="16" fill="url(#desk)"/>
+
+  <!-- macOS menu bar -->
+  <rect x="0" y="0" width="1000" height="32" fill="#FFFFFF" fill-opacity="0.82"/>
+  <line x1="0" y1="32" x2="1000" y2="32" stroke="#18201D" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="22" y="21" font-size="13" font-weight="700" fill="#18201D">Notes</text>
+  <text x="76" y="21" font-size="13" fill="#4B5752">File</text>
+  <text x="112" y="21" font-size="13" fill="#4B5752">Edit</text>
+  <text x="150" y="21" font-size="13" fill="#4B5752">Format</text>
+  <text x="920" y="21" font-size="12.5" fill="#4B5752">Tue 9:41</text>
+
+  <!-- Real Presspeech menu-bar mic silhouette (turns systemRed while recording) -->
+  <g transform="translate(888 8) scale(0.16)">
+    <g fill="#18201D">
+      <animate attributeName="fill" values="#18201D;#18201D;#FF3B30;#FF3B30;#18201D;#18201D" keyTimes="0;0.095;0.105;0.45;0.46;1" dur="6.8s" repeatCount="indefinite"/>
+      <rect x="35" y="10" width="30" height="55" rx="15"/>
+      <rect x="48.5" y="65" width="3" height="15"/>
+      <rect x="22" y="80" width="56" height="6" rx="3"/>
+    </g>
   </g>
-  <!-- Traffic lights + title -->
-  <circle cx="178" cy="68" r="6" fill="#FF5F57"/>
-  <circle cx="200" cy="68" r="6" fill="#FEBC2E"/>
-  <circle cx="222" cy="68" r="6" fill="#28C840"/>
-  <text x="500" y="73" text-anchor="middle" font-size="13" font-weight="500" fill="#94A3B8">A familiar text field</text>
-  <line x1="151" y1="88" x2="849" y2="88" stroke="#F1F5F9" stroke-width="1.5"/>
 
-  <!-- Existing note content -->
-  <text x="190" y="126" font-size="16" font-weight="600" fill="#0F172A">Friday standup</text>
-  <text x="190" y="158" font-size="15" fill="#64748B">·  demo the new build</text>
-  <text x="190" y="190" font-size="15" fill="#64748B">·</text>
+  <!-- Document window -->
+  <g filter="url(#winShadow)">
+    <rect x="130" y="60" width="740" height="236" rx="14" fill="#FFFFFF" stroke="#D9DDD8" stroke-width="1.2"/>
+  </g>
+  <path d="M 144 60 H 856 A 14 14 0 0 1 870 74 V 96 H 130 V 74 A 14 14 0 0 1 144 60 Z" fill="#F8F7F4"/>
+  <line x1="130" y1="96" x2="870" y2="96" stroke="#ECEAE4" stroke-width="1.2"/>
+  <circle cx="156" cy="78" r="6" fill="#FF5F57"/>
+  <circle cx="176" cy="78" r="6" fill="#FEBC2E"/>
+  <circle cx="196" cy="78" r="6" fill="#28C840"/>
+  <text x="500" y="83" text-anchor="middle" font-size="13" font-weight="600" fill="#64706A">Friday standup</text>
 
-  <!-- Paste flash behind the landing line -->
-  <rect x="200" y="173" width="292" height="24" rx="4" fill="#10B981" opacity="0">
-    <animate attributeName="opacity" values="0;0;0.25;0;0" keyTimes="0;0.4615;0.475;0.53;1" dur="6.5s" repeatCount="indefinite"/>
+  <!-- Window text content -->
+  <text x="168" y="138" font-size="18" font-weight="700" fill="#18201D">Friday standup</text>
+  <text x="168" y="172" font-size="16" fill="#5B6761">•  Demo the notarised macOS build</text>
+  <text x="168" y="206" font-size="16" fill="#5B6761">•</text>
+
+  <!-- Subtle paste flash when text lands -->
+  <rect x="184" y="187" width="318" height="26" rx="5" fill="#10B981" opacity="0">
+    <animate attributeName="opacity" values="0;0;0.24;0;0" keyTimes="0;0.50;0.52;0.60;1" dur="6.8s" repeatCount="indefinite"/>
   </rect>
 
-  <!-- The transcript appears all at once after local transcription. -->
-  <text x="204" y="190" font-size="16" font-weight="500" fill="#0F172A" textLength="280" fill-opacity="0">
-    <animate attributeName="fill-opacity" values="0;0;1;1;0;0" keyTimes="0;0.4608;0.4662;0.95;0.99;1" dur="6.5s" repeatCount="indefinite"/>
+  <!-- Complete dictated sentence appears all at once after local transcription -->
+  <text x="188" y="206" font-size="16" font-weight="500" fill="#18201D" fill-opacity="0">
+    <animate attributeName="fill-opacity" values="0;0;1;1;0;0" keyTimes="0;0.495;0.505;0.94;0.98;1" dur="6.8s" repeatCount="indefinite"/>
     This sentence was spoken, not typed.
   </text>
 
-  <!-- Caret before the paste (start of the empty bullet) -->
+  <!-- Caret before paste -->
   <g opacity="1">
-    <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.4608;0.4615;1" dur="6.5s" repeatCount="indefinite"/>
-    <rect x="204" y="174" width="2" height="21" fill="#0F172A">
-      <animate attributeName="fill-opacity" values="1;1;0;0;1" keyTimes="0;0.45;0.5;0.95;1" dur="1.1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.495;0.505;1" dur="6.8s" repeatCount="indefinite"/>
+    <rect x="188" y="189" width="2" height="21" fill="#18201D">
+      <animate attributeName="fill-opacity" values="1;1;0;0;1" keyTimes="0;0.48;0.5;0.96;1" dur="1.1s" repeatCount="indefinite"/>
     </rect>
   </g>
-  <!-- Caret after the paste (end of the sentence) -->
+  <!-- Caret after paste -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.4608;0.4615;0.95;0.99;1" dur="6.5s" repeatCount="indefinite"/>
-    <rect x="488" y="174" width="2" height="21" fill="#0F172A">
-      <animate attributeName="fill-opacity" values="1;1;0;0;1" keyTimes="0;0.45;0.5;0.95;1" dur="1.1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.495;0.505;0.94;0.98;1" dur="6.8s" repeatCount="indefinite"/>
+    <rect x="498" y="189" width="2" height="21" fill="#18201D">
+      <animate attributeName="fill-opacity" values="1;1;0;0;1" keyTimes="0;0.48;0.5;0.96;1" dur="1.1s" repeatCount="indefinite"/>
     </rect>
   </g>
 
-  <!-- Model-only benchmark chip: pops the moment the text lands. -->
+  <!-- Speed chip beside pasted text -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.4615;0.467;0.95;0.99;1" dur="6.5s" repeatCount="indefinite"/>
-    <rect x="500" y="170" width="108" height="28" rx="14" fill="#10B981"/>
-    <text x="554" y="189" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">model ~100 ms</text>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.505;0.52;0.94;0.98;1" dur="6.8s" repeatCount="indefinite"/>
+    <rect x="514" y="185" width="108" height="28" rx="14" fill="#E9F5F0"/>
+    <text x="568" y="203" text-anchor="middle" font-size="12.5" font-weight="700" fill="#075941">model ~100 ms</text>
   </g>
 
-  <!-- ====================================================== -->
-  <!-- The keycap — pressed for the whole speak phase          -->
-  <!-- ====================================================== -->
-  <!-- Base (the dark lip the cap sinks into) -->
-  <rect x="240" y="336" width="64" height="62" rx="12" fill="#CBD5E1"/>
+  <!-- Right Option keycap (sinks while pressed) -->
+  <rect x="240" y="346" width="60" height="54" rx="11" fill="#C9CFC9"/>
   <g>
-    <animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 5;0 5;0 0;0 0" keyTimes="0;0.077;0.082;0.446;0.452;1" dur="6.5s" repeatCount="indefinite"/>
-    <rect x="240" y="330" width="64" height="62" rx="12" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5">
-      <animate attributeName="fill" values="#FFFFFF;#FFFFFF;#10B981;#10B981;#FFFFFF;#FFFFFF" keyTimes="0;0.077;0.082;0.446;0.452;1" dur="6.5s" repeatCount="indefinite"/>
-      <animate attributeName="stroke" values="#CBD5E1;#CBD5E1;#0DA271;#0DA271;#CBD5E1;#CBD5E1" keyTimes="0;0.077;0.082;0.446;0.452;1" dur="6.5s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 4;0 4;0 0;0 0" keyTimes="0;0.095;0.105;0.445;0.455;1" dur="6.8s" repeatCount="indefinite"/>
+    <rect x="240" y="341" width="60" height="54" rx="11" fill="#FFFFFF" stroke="#C9CFC9" stroke-width="1.5">
+      <animate attributeName="fill" values="#FFFFFF;#FFFFFF;#FEF2F2;#FEF2F2;#FFFFFF;#FFFFFF" keyTimes="0;0.095;0.105;0.445;0.455;1" dur="6.8s" repeatCount="indefinite"/>
+      <animate attributeName="stroke" values="#C9CFC9;#C9CFC9;#E03131;#E03131;#C9CFC9;#C9CFC9" keyTimes="0;0.095;0.105;0.445;0.455;1" dur="6.8s" repeatCount="indefinite"/>
     </rect>
-    <!-- Option symbol, drawn as paths so it renders on every platform -->
-    <g fill="none" stroke="#334155" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
-      <animate attributeName="stroke" values="#334155;#334155;#FFFFFF;#FFFFFF;#334155;#334155" keyTimes="0;0.077;0.082;0.446;0.452;1" dur="6.5s" repeatCount="indefinite"/>
-      <path d="M 259 352.5 h 7 l 12 17 h 7"/>
-      <path d="M 278 352.5 h 7"/>
+    <g fill="none" stroke="#18201D" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+      <animate attributeName="stroke" values="#18201D;#18201D;#C92A2A;#C92A2A;#18201D;#18201D" keyTimes="0;0.095;0.105;0.445;0.455;1" dur="6.8s" repeatCount="indefinite"/>
+      <path d="M 257 360.5 h 6.5 l 11.5 16 h 6.5"/>
+      <path d="M 275 360.5 h 6.5"/>
     </g>
   </g>
-  <text x="272" y="420" text-anchor="middle" font-size="12" font-weight="500" fill="#94A3B8">Hold Right Option</text>
+  <text x="270" y="421" text-anchor="middle" font-size="12" font-weight="500" fill="#5D6A64">Hold Right Option</text>
 
-  <!-- ====================================================== -->
-  <!-- The dictation HUD — appears while the key is held       -->
-  <!-- ====================================================== -->
+  <!-- Authentic RecordingHUDView floating capsule (232x54 proportions, dark charcoal) -->
+  <!-- Recording phase: glowing red dot + animated red waveform bars + Esc cancel -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.077;0.092;0.45;0.49;1" dur="6.5s" repeatCount="indefinite"/>
-    <g filter="url(#soft)">
-      <rect x="320" y="334" width="440" height="56" rx="28" fill="#0F172A"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.095;0.115;0.445;0.455;1" dur="6.8s" repeatCount="indefinite"/>
+    <g filter="url(#hudShadow)">
+      <rect x="384" y="341" width="232" height="54" rx="27" fill="#0F0F0F" fill-opacity="0.92"/>
     </g>
-    <!-- Mic dot -->
-    <circle cx="348" cy="362" r="5" fill="#10B981">
-      <animate attributeName="r" values="4.5;6;4.5" dur="1.2s" repeatCount="indefinite"/>
-    </circle>
-    <!-- Live waveform -->
-    <g fill="#10B981">
-      <g transform="translate(368 362)"><rect x="-2.5" y="-11" width="5" height="22" rx="2.5">
-        <animateTransform attributeName="transform" type="scale" values="1 0.35;1 0.95;1 0.45;1 0.75;1 0.35" dur="0.8s" repeatCount="indefinite"/></rect></g>
-      <g transform="translate(380 362)"><rect x="-2.5" y="-11" width="5" height="22" rx="2.5">
-        <animateTransform attributeName="transform" type="scale" values="1 0.5;1 1;1 0.4;1 0.9;1 0.5" dur="0.95s" begin="-0.2s" repeatCount="indefinite"/></rect></g>
-      <g transform="translate(392 362)"><rect x="-2.5" y="-11" width="5" height="22" rx="2.5">
-        <animateTransform attributeName="transform" type="scale" values="1 0.3;1 0.8;1 1;1 0.5;1 0.3" dur="1.1s" begin="-0.5s" repeatCount="indefinite"/></rect></g>
-      <g transform="translate(404 362)"><rect x="-2.5" y="-11" width="5" height="22" rx="2.5">
-        <animateTransform attributeName="transform" type="scale" values="1 0.6;1 0.35;1 0.95;1 0.55;1 0.6" dur="0.85s" begin="-0.35s" repeatCount="indefinite"/></rect></g>
-      <g transform="translate(416 362)"><rect x="-2.5" y="-11" width="5" height="22" rx="2.5">
-        <animateTransform attributeName="transform" type="scale" values="1 0.4;1 0.9;1 0.5;1 1;1 0.4" dur="1.0s" begin="-0.65s" repeatCount="indefinite"/></rect></g>
-      <g transform="translate(428 362)"><rect x="-2.5" y="-11" width="5" height="22" rx="2.5">
-        <animateTransform attributeName="transform" type="scale" values="1 0.35;1 0.7;1 0.45;1 0.85;1 0.35" dur="0.9s" begin="-0.15s" repeatCount="indefinite"/></rect></g>
+    <circle cx="407" cy="368" r="11" fill="#FF3B30" fill-opacity="0.24"/>
+    <circle cx="407" cy="368" r="6" fill="#FF3B30"/>
+    <g fill="#FF5A52">
+      <g transform="translate(432 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.25;1 0.55;1 0.3;1 0.48;1 0.25" dur="0.78s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(438 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.35;1 0.72;1 0.38;1 0.62;1 0.35" dur="0.86s" begin="-0.12s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(444 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.42;1 0.85;1 0.45;1 0.74;1 0.42" dur="0.92s" begin="-0.25s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(450 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.5;1 0.96;1 0.52;1 0.82;1 0.5" dur="0.8s" begin="-0.38s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(456 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.55;1 1;1 0.48;1 0.9;1 0.55" dur="0.95s" begin="-0.5s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(462 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.48;1 0.92;1 0.58;1 0.84;1 0.48" dur="0.88s" begin="-0.18s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(468 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.52;1 1;1 0.46;1 0.88;1 0.52" dur="0.82s" begin="-0.44s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(474 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.6;1 0.95;1 0.5;1 0.92;1 0.6" dur="0.9s" begin="-0.62s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(480 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.5;1 0.98;1 0.44;1 0.86;1 0.5" dur="0.76s" begin="-0.3s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(486 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.45;1 0.88;1 0.52;1 0.78;1 0.45" dur="0.84s" begin="-0.1s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(492 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.48;1 0.94;1 0.42;1 0.82;1 0.48" dur="0.94s" begin="-0.55s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(498 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.42;1 0.84;1 0.48;1 0.72;1 0.42" dur="0.8s" begin="-0.22s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(504 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.36;1 0.72;1 0.38;1 0.6;1 0.36" dur="0.88s" begin="-0.4s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(510 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.28;1 0.58;1 0.3;1 0.48;1 0.28" dur="0.78s" begin="-0.15s" repeatCount="indefinite"/></rect></g>
+      <g transform="translate(516 368)"><rect x="-1.5" y="-12" width="3" height="24" rx="1.5"><animateTransform attributeName="transform" type="scale" values="1 0.22;1 0.44;1 0.25;1 0.38;1 0.22" dur="0.86s" begin="-0.32s" repeatCount="indefinite"/></rect></g>
     </g>
-    <!-- Live caption of what's being said -->
-    <g clip-path="url(#captionClip)">
-      <text x="448" y="368" font-size="15" font-style="italic" fill="#E2E8F0" textLength="285">“This sentence was spoken, not typed.”</text>
-    </g>
+    <text x="598" y="372" text-anchor="end" font-size="11" font-weight="500" fill="#FFFFFF" fill-opacity="0.58">Esc cancel</text>
   </g>
 
-  <!-- ====================================================== -->
-  <!-- Phase captions — each benefit lands when it's relevant  -->
-  <!-- ====================================================== -->
-  <!-- While speaking: privacy. Slashed cloud + on-device line -->
+  <!-- Transcribing phase: brief blue dot + Transcribing... beat on release -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.092;0.115;0.45;0.48;1" dur="6.5s" repeatCount="indefinite"/>
-    <g transform="translate(230 461)">
-      <g fill="#CBD5E1">
-        <circle cx="7" cy="10" r="5"/>
-        <circle cx="13" cy="7" r="6.5"/>
-        <circle cx="19" cy="10" r="5"/>
-        <rect x="4" y="9" width="18" height="6" rx="3"/>
-      </g>
-      <!-- Slash with a background-colored casing so it reads as a cut -->
-      <line x1="1" y1="17" x2="25" y2="-1" stroke="#FAF8F2" stroke-width="5.5" stroke-linecap="round"/>
-      <line x1="1" y1="17" x2="25" y2="-1" stroke="#64748B" stroke-width="2.5" stroke-linecap="round"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.448;0.455;0.495;0.505;1" dur="6.8s" repeatCount="indefinite"/>
+    <g filter="url(#hudShadow)">
+      <rect x="384" y="341" width="232" height="54" rx="27" fill="#0F0F0F" fill-opacity="0.92"/>
     </g>
-    <text x="270" y="471" font-size="14" fill="#64748B" textLength="480">Your voice never leaves this Mac — transcribed on the Apple Neural Engine.</text>
+    <circle cx="407" cy="368" r="11" fill="#007AFF" fill-opacity="0.26"/>
+    <circle cx="407" cy="368" r="6" fill="#007AFF"/>
+    <text x="430" y="373" font-size="12.5" font-weight="600" fill="#FFFFFF" fill-opacity="0.88">Transcribing...</text>
   </g>
 
-  <!-- After the paste: featherweight stats -->
+  <!-- Spoken-out-loud cue beneath the HUD while recording (so silent viewers know someone is speaking, without faking text inside the HUD) -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.52;0.55;0.95;0.99;1" dur="6.5s" repeatCount="indefinite"/>
-    <rect x="306" y="456" width="150" height="28" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
-    <text x="381" y="474" text-anchor="middle" font-size="13"><tspan font-weight="700" fill="#0E8A66">0% CPU</tspan><tspan fill="#64748B"> when idle</tspan></text>
-    <rect x="468" y="456" width="110" height="28" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
-    <text x="523" y="474" text-anchor="middle" font-size="13"><tspan font-weight="700" fill="#0E8A66">~80 MB</tspan><tspan fill="#64748B"> RAM</tspan></text>
-    <rect x="590" y="456" width="105" height="28" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
-    <text x="642" y="474" text-anchor="middle" font-size="13"><tspan font-weight="700" fill="#0E8A66">11 MB</tspan><tspan fill="#64748B"> app</tspan></text>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.105;0.13;0.445;0.46;1" dur="6.8s" repeatCount="indefinite"/>
+    <text x="545" y="421" text-anchor="middle" font-size="13.5" fill="#5D6A64"><tspan font-weight="600" fill="#B42318">Speaking </tspan><tspan font-style="italic" fill="#18201D">“This sentence was spoken, not typed.”</tspan></text>
+  </g>
+
+  <!-- Quiet bottom stat strip -->
+  <g>
+    <rect x="304" y="446" width="150" height="28" rx="14" fill="#FFFFFF" stroke="#D9DDD8" stroke-width="1.2"/>
+    <text x="379" y="464" text-anchor="middle" font-size="12.5"><tspan font-weight="700" fill="#0D7F5F">0% CPU</tspan><tspan fill="#5D6A64"> when idle</tspan></text>
+    <rect x="466" y="446" width="112" height="28" rx="14" fill="#FFFFFF" stroke="#D9DDD8" stroke-width="1.2"/>
+    <text x="522" y="464" text-anchor="middle" font-size="12.5"><tspan font-weight="700" fill="#0D7F5F">~80 MB</tspan><tspan fill="#5D6A64"> RAM</tspan></text>
+    <rect x="590" y="446" width="106" height="28" rx="14" fill="#FFFFFF" stroke="#D9DDD8" stroke-width="1.2"/>
+    <text x="643" y="464" text-anchor="middle" font-size="12.5"><tspan font-weight="700" fill="#0D7F5F">11 MB</tspan><tspan fill="#5D6A64"> app</tspan></text>
   </g>
 </svg>

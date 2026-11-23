@@ -595,6 +595,395 @@ figure.hero-demo {
   color: var(--muted);
 }
 
+/* ---------- Interactive hero simulation (matches macOS RecordingHUDView) ---------- */
+
+.sim-frame {
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: #e9e4d9;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.sim-menubar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid rgba(24, 32, 29, 0.08);
+  font-size: 0.74rem;
+  line-height: 1;
+  color: #27302c;
+  user-select: none;
+}
+
+.sim-menubar__left,
+.sim-menubar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sim-menubar__app {
+  font-weight: 700;
+}
+
+.sim-menubar__mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 18px;
+  border-radius: 4px;
+  color: #18201d;
+  transition: color 0.14s ease, background-color 0.14s ease;
+}
+
+.sim-menubar__mic[data-recording="true"] {
+  color: #e03131;
+  background: rgba(255, 59, 48, 0.14);
+}
+
+.sim-menubar__time {
+  font-variant-numeric: tabular-nums;
+  color: #424d48;
+}
+
+.sim-desktop {
+  position: relative;
+  padding: 20px 22px 86px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.55), transparent 55%),
+    linear-gradient(160deg, #ede9df 0%, #e1dbd0 100%);
+  min-height: 292px;
+}
+
+.sim-window {
+  background: #ffffff;
+  border: 1px solid rgba(24, 32, 29, 0.11);
+  border-radius: 11px;
+  box-shadow:
+    0 12px 28px rgba(24, 32, 29, 0.09),
+    0 1px 2px rgba(24, 32, 29, 0.06);
+  overflow: hidden;
+}
+
+.sim-window__chrome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 13px;
+  background: #f8f7f4;
+  border-bottom: 1px solid #eceae4;
+}
+
+.sim-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.sim-dot--red { background: #ff5f57; }
+.sim-dot--yellow { background: #febc2e; }
+.sim-dot--green { background: #28c840; }
+
+.sim-window__title {
+  margin-left: auto;
+  margin-right: auto;
+  padding-right: 42px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #5f6c66;
+}
+
+.sim-window__body {
+  padding: 16px 18px 20px;
+  min-height: 146px;
+}
+
+.hero .hero-demo .sim-window__body p.sim-note-heading {
+  margin: 0 0 10px;
+  font-size: 0.96rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #18201d;
+}
+
+.hero .hero-demo .sim-window__body p.sim-note-line {
+  margin: 0 0 7px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #55615c;
+}
+
+.hero .hero-demo .sim-window__body p.sim-note-line--active {
+  margin-bottom: 0;
+  min-height: 1.55em;
+  color: #18201d;
+}
+
+.sim-bullet {
+  display: inline-block;
+  margin-right: 6px;
+  color: #8b9690;
+}
+
+.sim-transcript {
+  border-radius: 4px;
+  padding: 1px 2px;
+  color: #18201d;
+  font-weight: 500;
+}
+
+.sim-transcript.is-flash {
+  animation: sim-paste-flash 0.75s ease-out;
+}
+
+@keyframes sim-paste-flash {
+  0% { background: rgba(16, 185, 129, 0.28); }
+  100% { background: transparent; }
+}
+
+.sim-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: -0.15em;
+  background: #18201d;
+  animation: sim-caret-blink 1.05s steps(1, end) infinite;
+}
+
+@keyframes sim-caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.sim-speed {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.sim-speed.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Exact RecordingHUDView floating capsule (232x54 proportions, bottom-center) */
+.sim-hud {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  width: 232px;
+  height: 50px;
+  padding: 0 15px 0 16px;
+  border-radius: 999px;
+  background: rgba(15, 15, 15, 0.92);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
+  transform: translateX(-50%) scale(0.76);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.1s ease,
+    transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sim-hud[data-mode="recording"],
+.sim-hud[data-mode="transcribing"] {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.sim-hud__dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff3b30;
+  box-shadow: 0 0 0 5px rgba(255, 59, 48, 0.24);
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.sim-hud[data-mode="transcribing"] .sim-hud__dot {
+  background: #007aff;
+  box-shadow: 0 0 0 5px rgba(0, 122, 255, 0.26);
+}
+
+.sim-hud__wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+  margin-left: 14px;
+}
+
+.sim-hud__wave i {
+  display: block;
+  width: 3px;
+  height: 6px;
+  border-radius: 999px;
+  background: #ff5a52;
+  transition: height 0.06s linear;
+}
+
+.sim-hud__cancel {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.58);
+  white-space: nowrap;
+}
+
+.sim-hud__transcribing {
+  display: none;
+  margin-left: 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: -0.005em;
+}
+
+.sim-hud[data-mode="transcribing"] .sim-hud__wave,
+.sim-hud[data-mode="transcribing"] .sim-hud__cancel {
+  display: none;
+}
+
+.sim-hud[data-mode="transcribing"] .sim-hud__transcribing {
+  display: inline;
+}
+
+.sim-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.sim-keycap {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 3px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 640;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  transition: transform 0.06s ease, border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+}
+
+.sim-keycap:hover {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.sim-keycap[aria-pressed="true"] {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+  border-color: #d92d20;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.sim-keycap:focus-visible,
+.sim-replay:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.sim-keycap__glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--bg-tint);
+  font-size: 0.82rem;
+}
+
+.sim-keycap[aria-pressed="true"] .sim-keycap__glyph {
+  background: rgba(217, 45, 32, 0.14);
+}
+
+.sim-status {
+  flex: 1 1 160px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.sim-status__label {
+  color: var(--muted);
+}
+
+.hero-demo[data-state="recording"] .sim-status__label {
+  color: #b42318;
+  font-weight: 640;
+}
+
+.sim-status__speech {
+  font-style: italic;
+  color: var(--text);
+}
+
+.sim-replay {
+  min-height: 36px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sim-replay:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-tint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sim-caret,
+  .sim-transcript.is-flash {
+    animation: none;
+  }
+  .sim-hud,
+  .sim-speed,
+  .sim-keycap {
+    transition: none;
+  }
+}
+
 .start-card {
   border-radius: 14px;
   background: linear-gradient(180deg, #ffffff 0%, #f3f9f6 100%);
