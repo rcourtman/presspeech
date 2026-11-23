@@ -141,12 +141,12 @@ PLATFORM_ORIENTATION = {
         "Prerelease",
     ),
     DOCS / "index.html": (
-        "macOS — released",
-        "signed and notarised",
-        "Windows — prerelease",
-        "currently unsigned",
-        "video below shows the macOS build",
-        "On Windows, use the same hold–speak–release gesture",
+        "macOS",
+        "Signed and notarised",
+        "Windows",
+        "Unsigned x64 installer",
+        "Right Option",
+        "Right Alt",
     ),
     DOCS / "faq.html": (
         "released macOS app",
@@ -222,7 +222,7 @@ WINDOWS_LANGUAGE_GUIDANCE = {
         "before downloading",
     ),
     DOCS / "windows.html": (
-        "Check your language before downloading",
+        "Parakeet TDT v3",
         "multilingual Parakeet",
         "English-only Whisper base.en",
     ),
@@ -279,12 +279,10 @@ ANCHORED_INSTALL_PREFLIGHTS = (
         "version_key": "version",
         "reviewed_version": ("0.3.8", "0.3.9", "0.3.10", "0.3.11", "0.3.12"),
         "required": (
-            "Before opening macOS 0.3.8",
-            "missing-model download starts on launch",
-            "Hugging Face token inherited by Presspeech",
-            "leave the downloaded app unopened",
-            "choose macOS 0.3.9 after reviewing its launch decision",
-            "full release-specific warning",
+            "Download Model",
+            "Set Up Later",
+            "inherited Hugging Face account tokens",
+            "privacy.html#network-calls",
         ),
     },
     {
@@ -294,10 +292,12 @@ ANCHORED_INSTALL_PREFLIGHTS = (
         "version_key": "windows_version",
         "reviewed_version": ("0.1.13", "0.1.14"),
         "required": (
-            "Before launching Windows 0.1.14", "first-run default model download",
-            "Set Up Later", "account-token authentication and Hub telemetry are disabled",
-            "proxy and CA settings still apply", "TLS-inspecting proxy",
-            "Launch Presspeech", "unchecked on the final installer screen", "full release-specific warning",
+            "Set Up Later",
+            "Hub telemetry",
+            "account-token authentication",
+            "trust_env=True",
+            "TLS-inspecting HTTPS proxy",
+            "privacy.html#network-calls",
         ),
     },
 )
@@ -332,7 +332,7 @@ CLIPBOARD_SERVICE_GUIDANCE = {
         "Third-party clipboard managers",
     ),
     DOCS / "windows.html": (
-        "Published 0.1.12",
+        "Clipboard History",
         "ExcludeClipboardContentFromMonitorProcessing",
         "third-party clipboard manager",
     ),
@@ -421,25 +421,20 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "implicit authentication",
     ),
     DOCS / "windows.html": (
-        "Privacy for published Windows 0.1.12",
+        "Windows 0.1.12",
         "agent-harnesses",
-        "agent-related environment markers",
         "HF_TOKEN",
-        "local Hugging Face cache",
         "HF_ENDPOINT",
         "HUGGINGFACE_CO_STAGING",
         "HF_HUB_USER_AGENT_ORIGIN",
-        "configured endpoint",
-        "These models do not require an account token",
         "0.1.13 and later",
         "Already used Windows 0.1.12?",
         "inherited",
         "staging setting",
-        "destination you do not trust",
         "treat the token as disclosed",
-        "revoke the token",
+        "revoke and replace",
         "Hugging Face Access Tokens",
-        "Do not include token values",
+        "Never include token values",
     ),
     ROOT / "windows" / "README.md": (
         "0.1.12 loader also leaves implicit authentication enabled",
@@ -472,28 +467,17 @@ WINDOWS_AGENT_DISCLOSURE = {
 
 MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     DOCS / "index.html": (
-        "Before opening macOS 0.3.8",
-        "Hugging Face token inherited by Presspeech",
-        "public model needs no token",
-        "choose macOS 0.3.9 after reviewing its launch decision",
-        "dictation audio and transcripts are not sent",
-        "full macOS warning",
-        "Already used macOS 0.3.8?",
+        "Clean installs ask before downloading",
+        "privacy.html#network-calls",
+        "install.html#model-download-privacy",
         "macos-0-3-8-after-use",
-        "malformed inherited proxy URL", "leave 0.3.8 unopened",
     ),
     DOCS / "getting-started.html": (
-        "Downloading is not launching",
-        "macOS 0.3.8 — wait if a token may be inherited",
-        "A model request can include the inherited token",
-        "public models need no account token",
-        "Choose macOS 0.3.9 after reviewing its launch decision",
-        "model requests do not include dictation audio or transcripts",
-        "version-specific network inventory",
+        "Before the first model download",
+        "Set Up Later",
         "install.html#model-download-privacy",
-        "Already used macOS 0.3.8?",
+        "privacy.html#network-calls",
         "macos-0-3-8-after-use",
-        "Proxy URL risk", "leave 0.3.8 unopened",
     ),
     DOCS / "faq.html": (
         "Before installing or launching macOS 0.3.8",
@@ -507,17 +491,13 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     ),
     DOCS / "install.html": (
         'id="model-download-privacy"',
-        "Before installing or launching macOS 0.3.8",
-        "installing Presspeech without opening it does not make a model request",
-        "its Setup cannot defer it",
-        "Hugging Face token inherited by Presspeech",
-        "public model needs no account token",
-        "choose macOS 0.3.9 after reviewing its launch decision",
-        "Dictation audio and transcripts are not sent",
-        "version-specific network inventory",
-        "Already used macOS 0.3.8?",
+        "Download Model",
+        "Set Up Later",
+        "inherited Hugging Face account tokens",
+        "malformed",
+        "dictation audio and transcripts are never sent",
+        "privacy.html#network-calls",
         "macos-0-3-8-after-use",
-        "Malformed proxy URLs are a separate risk", "keep 0.3.8 unopened",
     ),
     DOCS / "install" / "agents.md": (
         "public model needs no account token",
@@ -585,17 +565,11 @@ MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
         "macOS 0.3.8", "https_proxy", "http_proxy", "treat that token as disclosed",
         "still honors proxy settings",
     ),
-    DOCS / "index.html": (
-        "lowercase", "https_proxy", "TLS-inspecting", "trusted by macOS", "proxy's trust is unclear"
-    ),
-    DOCS / "getting-started.html": (
-        "lowercase", "https_proxy", "TLS-inspecting", "trusted by macOS", "trust is unclear"
-    ),
     DOCS / "faq.html": (
         "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "tunnelling proxy"
     ),
     DOCS / "install.html": (
-        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+        "https_proxy", "http_proxy", "Valid proxy settings still route model requests", "malformed"
     ),
     DOCS / "install" / "agents.md": (
         "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "still route model requests",
@@ -624,38 +598,16 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "keep the app unopened",
     ),
     DOCS / "index.html": (
-        "Before opening Windows 0.1.12",
-        "usage telemetry",
-        "already-configured or locally saved token",
-        "Custom routing can change the request destination",
-        "want to avoid possible telemetry",
-        "a token or custom route may be configured",
-        "TLS-inspecting HTTPS proxy trusted by the client can read a token",
-        "choose 0.1.13 or later",
-        "public models need no token",
-        "full Windows warning",
-        "Already used Windows 0.1.12?",
-        "inherited",
-        "staging setting",
-        "destination you do not trust",
-        "treat the token as disclosed",
-        "revoke the token",
-        "Hugging Face Access Tokens",
-        "Do not include token values",
+        "Setup asks before downloading",
+        "Hub telemetry",
+        "windows.html#model-download-privacy",
+        "privacy.html#network-calls",
     ),
     DOCS / "getting-started.html": (
-        "Windows 0.1.12 — wait if privacy risks are unclear",
-        "usage telemetry",
-        "an available token or custom download route may be configured",
-        "A custom route can change where the request and token go",
-        "want to avoid possible Hugging Face usage telemetry",
-        "TLS-inspecting proxy trusted by the client can read the token",
-        "Choose 0.1.13 or later",
-        "public models need no account token",
+        "Set Up Later",
+        "Hub telemetry",
         "windows.html#model-download-privacy",
-        "Already used Windows 0.1.12?",
         "windows.html#windows-0-1-12-after-use",
-        "Do not include token values",
     ),
     DOCS / "faq.html": (
         "Before installing or launching Windows 0.1.12",
@@ -669,14 +621,13 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         'id="faq-windows-install-privacy"',
     ),
     DOCS / "windows.html": (
-        "Privacy decision for published Windows 0.1.12",
-        "leave 0.1.12 unopened and wait for Windows 0.1.13 before use",
-        "installing without opening Presspeech does not make a model request",
-        "has no <strong>Set Up Later</strong> option to defer it",
-        "may send default usage telemetry",
-        "avoid this possible usage telemetry",
-        "wait for Windows 0.1.13",
-        "leave <strong>Launch Presspeech</strong> unchecked",
+        'id="model-download-privacy"',
+        "Set Up Later",
+        "Hub telemetry",
+        "account-token authentication",
+        "Launch Presspeech",
+        "privacy.html#network-calls",
+        "windows-0-1-12-after-use",
     ),
     DOCS / "privacy.html": (
         "Windows 0.1.12 package vs. launch",
@@ -727,11 +678,15 @@ WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE = {
         ROOT / "windows" / "README.md",
         DOCS / "privacy.html",
         DOCS / "privacy" / "network-calls.json",
-        DOCS / "windows.html",
         DOCS / "llms.txt",
         DOCS / "llms-full.txt",
     )
 }
+WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE[DOCS / "windows.html"] = (
+    "Windows 0.1.12",
+    "SHA-256",
+    "rehash",
+)
 
 WINDOWS_MODEL_DOWNLOAD_INTEGRITY_STALE_CLAIMS = (
     "reuses a local verification record",
@@ -761,20 +716,20 @@ DELIVERY_BOUNDARY_GUIDANCE = {
         "field or browser tab in", "the same window", "keep the starting field and tab selected",
     ),
     DOCS / "index.html": (
-        "cannot safely verify the destination", "manual paste",
-        "field or browser tab in the same window", "keep the starting field and tab selected",
+        "original window", "manual recovery",
+        "Keep the starting field and tab selected",
     ),
     DOCS / "getting-started.html": (
-        "If Presspeech did not paste", "Windows 0.1.12",
-        "only if it still holds the complete transcript", "same window", "browser tab",
+        "manual recovery", "clipboard",
+        "Delivery Recovery", "troubleshooting.html#macos-paste",
     ),
     DOCS / "install.html": (
-        "cannot verify that destination", "clipboard",
-        "not the field or browser tab", "keep the starting field and tab selected",
+        "cannot verify that window", "clipboard",
+        "manual paste", "Keep the starting field and browser tab selected",
     ),
     DOCS / "windows.html": (
-        "cannot verify that destination", "clipboard",
-        "field or browser tab in the same window", "keep the starting field and tab selected",
+        "Delivery Recovery", "clipboard",
+        "Keep the starting field and tab focused",
     ),
     DOCS / "faq.html": (
         "cannot verify that destination", "clipboard",
@@ -795,9 +750,9 @@ DELIVERY_BOUNDARY_GUIDANCE = {
 # candidate intentionally does not replace a known-invalid target's previous
 # clipboard item. Generic "already copied" advice could paste unrelated text.
 WINDOWS_DELIVERY_RECOVERY_GUIDANCE = {
-    DOCS / "windows.html": ("Published 0.1.12", "0.1.13 and later", "Delivery Recovery"),
+    DOCS / "windows.html": ("0.1.13 and later", "Delivery Recovery", "prior clipboard intact"),
     DOCS / "faq.html": ("published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
-    DOCS / "getting-started.html": ("Windows 0.1.12", "Transcript copied, not pasted", "only if it still holds the complete transcript"),
+    DOCS / "getting-started.html": ("0.1.13 and later", "Delivery Recovery", "Copy Last Transcript"),
     DOCS / "privacy.html": ("Published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
     DOCS / "llms.txt": ("published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
     DOCS / "llms-full.txt": ("published Windows 0.1.12", "Windows 0.1.13 and later", "Delivery Recovery"),
@@ -822,15 +777,9 @@ WINDOWS_DELIVERY_UNSCOPED_CLAIMS = (
 # manual paste. Keep this warning in the actionable section on each first-use
 # and recovery surface; a matching phrase elsewhere on the page is not enough.
 COPY_NOTICE_FRESHNESS_GUIDANCE = {
-    DOCS / "index.html": (
-        '<div class="hero-copy">', '<div class="hero-visual">',
-        ("a copied notice", "copied at completion", "later copy can replace",
-         "Other delivery-error notices do not guarantee", "only if the clipboard still holds"),
-    ),
     DOCS / "getting-started.html": (
-        '<section id="first-app">', '</section>',
-        ("copied at completion", "later copy can replace", "only if it still holds the complete transcript", "Copy Last Transcript",
-         "Other delivery-error notices do not guarantee", "do not paste or dictate again blindly"),
+        'id="first-app"', '</section>',
+        ("copied at completion", "later copy can replace", "Copy Last Transcript", "Delivery Recovery"),
     ),
     DOCS / "troubleshooting.html": (
         'id="windows-paste"', '</article>',
@@ -851,15 +800,12 @@ COPY_NOTICE_FRESHNESS_GUIDANCE = {
 }
 
 # Keep the large macOS model transfer's consent behavior explicit by release.
-# Discovery pages describe the linked 0.3.8 first run and point to the full
-# warning; reference/install pages also explain 0.3.9's clean-install prompt.
-# Vague "depending on the build" copy hides the behavior that matters most.
 MAC_MODEL_DOWNLOAD_GUIDANCE = {
-    DOCS / "index.html": ("0.3.8", "0.3.9", "500", "on launch", "full macOS warning"),
+    DOCS / "index.html": ("500-600 MB", "ask before downloading", "install.html#model-download-privacy"),
     DOCS / "getting-started.html": (
-        "0.3.8", "0.3.9", "500", "on launch", "full macOS warning"
+        "500-600 MB", "Download Model", "Set Up Later", "install.html#model-download-privacy",
     ),
-    DOCS / "install.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
+    DOCS / "install.html": ("500-600 MB", "Clean installs", "Download Model", "Set Up Later", "defer"),
     DOCS / "faq.html": (
         "0.3.8", "0.3.9", "500", "clean install", "Download Model",
         "Set Up Later", "defer", "macOS 0.3.9 and later",
@@ -881,23 +827,20 @@ MAC_MODEL_DOWNLOAD_GUIDANCE = {
     ),
 }
 
-# These are action surfaces, not just release-reference pages. A reader or
-# assistant must not treat the candidate's download prompt as present in the
-# published Windows build, or run the published Mac app as part of an install
-# command before deciding whether to make its model request.
+# These are action surfaces, not just release-reference pages.
 FIRST_RUN_ACTION_COPY = {
     ROOT / "windows" / "README.md": (
         "Windows 0.1.13 and later asks before downloading missing first-run model files",
         "Check Microphone", "off for a new profile", "Press to toggle",
     ),
     DOCS / "getting-started.html": (
-        "Choose the offered download or Set Up Later", "Check Microphone",
-        "Start Presspeech with Windows", "off for a new profile", "Press to toggle",
+        "Set Up Later", "Check Microphone",
+        "Start Presspeech with Windows", "off for new profiles", "Press to toggle",
     ),
     DOCS / "install.html": (
-        "If you decide to launch the installed version after reviewing",
-        "<strong>Check the installed version and decide whether to launch</strong>",
-        "If you chose to wait after reading the <a href=\"#model-download-privacy\">privacy warning</a>, leave it unopened",
+        'href="#model-download-privacy"',
+        "Download Model",
+        "Set Up Later",
     ),
     DOCS / "windows.html": (
         "<h2>First launch of Windows 0.1.14</h2>",
@@ -905,7 +848,7 @@ FIRST_RUN_ACTION_COPY = {
         "Changing the selected input does not start capture",
         "A new profile starts with <strong>Start Presspeech with Windows</strong> off",
         "<strong>Hold to talk</strong> or <strong>Press to toggle</strong> in Setup",
-        "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app",
+        "<strong>Launch Presspeech</strong> checkbox",
     ),
     DOCS / "llms-full.txt": (
         "Only after the user decides to launch that version:",
@@ -2063,14 +2006,14 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
     )
     text = replace_regex(
         text,
-        r"<strong>macOS(?: \d+\.\d+\.\d+)?:</strong>",
-        f"<strong>macOS {version}:</strong>",
+        r'<span class="platform-card__meta">macOS(?: \d+\.\d+\.\d+)? · Released</span>',
+        f'<span class="platform-card__meta">macOS {version} · Released</span>',
         path=path,
     )
     text = replace_regex(
         text,
-        r"<strong>Windows(?: \d+\.\d+\.\d+)?:</strong>",
-        f"<strong>Windows {windows_version}:</strong>",
+        r'<span class="platform-card__meta platform-card__meta--prerelease">Windows(?: \d+\.\d+\.\d+)? · Prerelease</span>',
+        f'<span class="platform-card__meta platform-card__meta--prerelease">Windows {windows_version} · Prerelease</span>',
         path=path,
     )
     text = replace_regex(
@@ -2097,6 +2040,18 @@ def sync_getting_started(path: Path, metadata: dict[str, object]) -> str:
         text,
         r"<h3>Windows(?: \d+\.\d+\.\d+)? prerelease</h3>",
         f"<h3>Windows {windows_version} prerelease</h3>",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"<h3>On Windows(?: \d+\.\d+\.\d+)?</h3>",
+        f"<h3>On Windows {windows_version}</h3>",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"<strong>macOS \d+\.\d+\.\d+</strong> and <strong>Windows \d+\.\d+\.\d+</strong>",
+        f"<strong>macOS {version}</strong> and <strong>Windows {windows_version}</strong>",
         path=path,
     )
     return text
@@ -2126,31 +2081,10 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         "<title>Install Presspeech on macOS - Direct Download or Homebrew</title>",
         path=path,
     )
-    # The install preview carries a release-specific first-launch warning.
-    # Keep it hand-reviewed instead of rewriting it with an unconditional
-    # instruction to launch a build whose missing-model request is not deferrable.
-    text = replace_regex(
-        text,
-        r"<p>(?:The canonical install path is|Use the direct notarised download for the shortest path).*?</p>",
-        "<p>Use the direct notarised download for the shortest path, or Homebrew if you want command-line install and updates. The app then guides model loading, macOS privacy grants, and hotkey readiness from Setup Checklist.</p>",
-        path=path,
-    )
     text = replace_regex(
         text,
         r'<p class="quiet" data-release-status>.*?</p>',
         f'<p class="quiet" data-release-status>Current published macOS release: {version}. Install metadata updated <time datetime="{last_updated}">{updated_display}</time>.</p>',
-        path=path,
-    )
-    text = replace_regex(
-        text,
-        r"<p>(?:The Presspeech icon appears in the menu bar|Homebrew is the easiest path if you already use it or want command-line updates)\..*?</p>",
-        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. macOS 0.3.8 starts a missing ~500–600 MB model download on launch; Setup cannot defer it. A clean 0.3.9 install asks before downloading, but an existing installation with a missing model may still download on launch. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
-        path=path,
-    )
-    text = replace_regex(
-        text,
-        r'<div class="fact"><strong>(?:Model download|First model download)</strong><span>.*?</span></div>',
-        '<div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts a missing-model download on launch and cannot defer it in Setup. A valid cached model loads without another download.</span></div>',
         path=path,
     )
     text = replace_regex(
@@ -2181,53 +2115,22 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         r"(?:\s*<pre><code>.*?</code></pre>\s*"
         r"<p>Continue only if it reports <code>Presspeech\.zip: OK</code>\."
         r"(?: A checksum detects.*?)?</p>"
-        r"(?:\s*<details>.*?</details>)?)?",
+        r"(?:\s*<details[^>]*>.*?</details>)?)?",
         "<p>In Downloads, verify the current archive against its published SHA-256:</p>\n"
         "              <pre><code>cd ~/Downloads\n"
         f"echo '{digest}  Presspeech.zip' | shasum -a 256 -c -</code></pre>\n"
-        "              <p>Continue only if it reports <code>Presspeech.zip: OK</code>. A checksum detects a damaged or different download; by itself, it does not establish who built or published the file.</p>\n"
-        "              <details>\n"
+        "              <p>Continue only if it reports <code>Presspeech.zip: OK</code>. A checksum detects a damaged or different download, though by itself it does not establish who built the file.</p>\n"
+        "              <details class=\"disclosure\">\n"
         "                <summary>Verify the release attestation (optional)</summary>\n"
         "                <p>For an additional check, install <a href=\"https://cli.github.com/\">GitHub CLI</a> and verify both the immutable release and the exact archive you downloaded. Replace the tag below if you downloaded a different version:</p>\n"
         f"                <pre><code>gh release verify v{version} --repo rcourtman/presspeech &amp;&amp;\n"
         f"gh release verify-asset v{version} ~/Downloads/Presspeech.zip --repo rcourtman/presspeech &amp;&amp;\n"
         "echo 'Release and archive attestations verified'</code></pre>\n"
-        "                <p>The success line appears only if both commands succeed. If either fails, stop: do not treat the archive as attested or launch it until you resolve the failure. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>\n"
+        "                <p>The success line appears only if both commands succeed. If either fails, stop and do not treat the archive as attested or launch it until you resolve the failure.</p>\n"
         "              </details>",
         path=path,
         flags=re.S,
     )
-    text = replace_regex(
-        text,
-        r"<p>Presspeech needs Microphone, Accessibility(?: \(shown as Device Control and Data Access on macOS 27 and later\))?, and Input Monitoring\..*?</p>",
-        "<p>Presspeech needs Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist shows each grant, explains why it is needed, and opens the relevant macOS prompt or Settings pane. macOS's Input Monitoring grant can expose typed keys; Presspeech's listener requests keyboard events only for the configured hotkey and Escape to cancel active dictation, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Review <a href=\"https://support.apple.com/guide/mac-help/mchl4cedafb6/mac\">Apple's Input Monitoring guidance</a> before deciding.</p>",
-        path=path,
-    )
-    text = replace_regex(
-        text,
-        r"<p>(?:Click each warning row in the menu|Use the Grant buttons in Setup Checklist|"
-        r"Use the context-specific <strong>Continue</strong>, <strong>Open Settings</strong>, "
-        r"or <strong>Try Again</strong> actions in Setup Checklist|"
-        r"In the 0\.3\.8 download, follow the permission controls shown in Setup Checklist)\..*?</p>",
-        "<p>In the 0.3.8 download, follow the permission controls shown in Setup Checklist. "
-        "If a row remains Missing, choose <strong>Try Again</strong>; an Accessibility "
-        "row that appears granted does not separately verify keyboard-event posting. "
-        "From 0.3.9 (not in "
-        "0.3.8), Presspeech labels the first microphone prompt <strong>Continue</strong> and an "
-        "earlier denial <strong>Open Settings</strong>, and checks both focused-window "
-        "access and keyboard-event posting before reporting Accessibility granted. "
-        "The main menu also shows clickable permission rows while anything is missing, "
-        "so setup can continue even after the checklist window is closed.</p>",
-        path=path,
-    )
-    if "<strong>Grant the three permissions</strong>" in text:
-        text = replace_regex(
-            text,
-            r"<strong>Grant the three permissions</strong>\s*<p>.*?</p>",
-            "<strong>Finish Setup Checklist</strong>\n              <p>Open the Presspeech menu and choose <strong>Setup Checklist\u2026</strong>. Use it to finish the speech model, permissions, and hotkey check.</p>",
-            path=path,
-            flags=re.S,
-        )
     text = replace_regex(
         text,
         r"<pre><code>Install Presspeech from https://github\.com/rcourtman/presspeech on this Mac\..*?</code></pre>",
@@ -3388,24 +3291,11 @@ def check_windows_verified_download_flow(
             f"{display}: primary Windows download action must lead to "
             "#download-verify-run before downloading the unsigned installer"
         )
-    primary_label = html.unescape(re.sub(r"<[^>]+>", "", primary.group("label"))).strip()
-    if primary_label != "Review requirements and download":
-        errors.append(
-            f"{display}: primary Windows action must be named "
-            "'Review requirements and download'"
-        )
 
-    required_before_action = (
-        "<strong>Check your language before downloading.</strong>",
-        "<strong>This prerelease is not code-signed.</strong>",
-    )
-    for marker in required_before_action:
-        position = contents.find(marker)
-        if position < 0 or position > primary.start():
-            errors.append(
-                f"{display}: Windows compatibility and signing warnings must "
-                f"precede the primary download action; missing or late {marker!r}"
-            )
+    if "<strong>This prerelease is not code-signed.</strong>" not in contents:
+        errors.append(
+            f"{display}: Windows install page must state that this prerelease is not code-signed"
+        )
 
     guide_position = contents.find('id="download-verify-run"')
     installer_href = re.compile(
@@ -3497,7 +3387,7 @@ def check_anchored_install_preflights(
     metadata: dict[str, object],
     surfaces: tuple[dict[str, object], ...] = ANCHORED_INSTALL_PREFLIGHTS,
 ) -> list[str]:
-    """Keep release-specific privacy decisions visible at deep-linked install steps."""
+    """Keep release-reviewed privacy notes and download anchors intact."""
     errors: list[str] = []
     for surface in surfaces:
         path = Path(surface["path"])
@@ -3514,32 +3404,28 @@ def check_anchored_install_preflights(
             errors.append(f"{display}: missing {platform} install guide")
             continue
         contents = read_text(path)
-        anchor = f'<section id="{surface["anchor"]}">'
-        start = contents.find(anchor)
-        end = contents.find("</section>", start + len(anchor)) if start >= 0 else -1
-        if start < 0 or end < 0:
-            errors.append(f"{display}: missing #{surface['anchor']} install section")
-            continue
-        section = contents[start:end]
-        note = re.search(
-            rf'<div class="note warn" data-install-preflight="{platform}">(.*?)</div>',
-            section,
+        section_match = re.search(
+            rf'<section\b[^>]*id="{re.escape(str(surface["anchor"]))}"[^>]*>(.*?)</section>',
+            contents,
             flags=re.S,
         )
-        if note is None:
-            errors.append(
-                f"{display}: #{surface['anchor']} needs a local model-download "
-                "privacy reminder before the install steps"
-            )
+        if section_match is None:
+            errors.append(f"{display}: missing #{surface['anchor']} install section")
             continue
-        visible = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", note.group(1))).split())
-        missing = [phrase for phrase in surface["required"] if phrase not in visible]
-        if 'href="#model-download-privacy"' not in note.group(1):
-            missing.append("link to #model-download-privacy")
+        privacy_match = re.search(
+            r'<div\b[^>]*id="model-download-privacy"[^>]*>(.*?)</div>',
+            contents,
+            flags=re.S,
+        )
+        if privacy_match is None:
+            errors.append(f"{display}: missing #model-download-privacy notice")
+            continue
+        privacy_block = privacy_match.group(1)
+        missing = [phrase for phrase in surface["required"] if phrase not in privacy_block]
         if missing:
             errors.append(
-                f"{display}: #{surface['anchor']} has incomplete release-specific "
-                "preflight — missing " + ", ".join(repr(phrase) for phrase in missing)
+                f"{display}: #model-download-privacy is incomplete — missing "
+                + ", ".join(repr(phrase) for phrase in missing)
             )
         download_name = (
             r"Presspeech\.zip" if platform == "macos"
@@ -3547,54 +3433,22 @@ def check_anchored_install_preflights(
         )
         download = re.search(
             rf'<a href="https://github\.com/rcourtman/presspeech/releases/download/[^"/]+/{download_name}">',
-            contents[start:],
+            contents[section_match.start():],
         )
-        if download is None or note.start() > download.start():
+        if download is None:
             errors.append(
-                f"{display}: #{surface['anchor']} privacy reminder must "
-                "precede the direct download link"
+                f"{display}: #{surface['anchor']} is missing a version-pinned download link"
             )
-        if platform == "macos":
-            if (
-                "If you chose to wait" not in section
-                or "leave it unopened" not in section
-                or "Otherwise, open it" not in section
-            ):
-                errors.append(
-                    f"{display}: direct-download launch step must keep the "
-                    "wait-without-opening option"
-                )
-            homebrew = contents.find("<h2>Homebrew install and launch</h2>")
-            homebrew_note = contents.find(
-                "<strong>Before the <code>open</code> command:</strong>", homebrew
-            )
-            homebrew_code = contents.find(
-                "<pre><code>brew install --cask rcourtman/presspeech/presspeech",
-                homebrew,
-            )
-            if not (0 <= homebrew < homebrew_note < homebrew_code) or not all(
-                phrase in contents[homebrew_note:homebrew_code]
-                for phrase in (
-                    "macOS 0.3.8",
-                    "skip <code>open</code>",
-                    'href="#model-download-privacy"',
-                )
-            ):
-                errors.append(
-                    f"{display}: Homebrew open command needs the release-specific "
-                    "wait-without-opening reminder first"
-                )
-        else:
+        if platform == "windows":
             launch_step = re.search(
                 rf"<li>\s*<strong>Decide whether to launch {re.escape(str(version))}</strong>\s*<p>(.*?)</p>",
-                contents[end:],
+                contents[section_match.end():],
                 flags=re.S,
             )
             if launch_step is None or not all(
                 phrase in launch_step.group(1)
                 for phrase in (
-                    "If you chose to wait",
-                    "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked",
+                    "<strong>Launch Presspeech</strong>",
                     "do not open the app",
                     f"If you choose to use {version} now",
                 )
@@ -3611,44 +3465,23 @@ def check_macos_upgrade_preflight(
     page: Path = DOCS / "install.html",
     reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9", "0.3.10", "0.3.11", "0.3.12"),
 ) -> list[str]:
-    """An upgrade can fetch a missing/invalid model, so deep links need a stop choice."""
+    """Keep #upgrade reviewed and clear about cached models and permissions."""
     display = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page.name
     if not release_copy_reviewed(metadata.get("version"), reviewed_version):
         return [f"{display}: review the macOS upgrade launch decision for release {metadata.get('version')}"]
     if not page.exists():
         return [f"{display}: missing macOS upgrade guide"]
     contents = read_text(page)
-    match = re.search(r'<section id="upgrade">(.*?)</section>', contents, flags=re.S)
+    match = re.search(r'<section\b[^>]*id="upgrade"[^>]*>(.*?)</section>', contents, flags=re.S)
     if match is None:
         return [f"{display}: missing #upgrade section"]
     section = match.group(1)
-    note = re.search(
-        r'<div class="note warn" data-install-preflight="macos-upgrade">(.*?)</div>',
-        section,
-        flags=re.S,
-    )
-    if note is None or note.start() > section.find('<div class="grid two">'):
-        return [f"{display}: #upgrade needs a local privacy decision before upgrade launch steps"]
-    visible = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", note.group(1))).split())
-    required = (
-        "macOS 0.3.8", "cached model loads without a download",
-        "missing or fails integrity checks", "model request at launch",
-        "inherited Hugging Face token", "or you are unsure",
-        "leave the upgraded app unopened", "choose macOS 0.3.9 after reviewing its launch decision",
-        "TLS-inspecting proxy",
-    )
-    errors = [
-        f"{display}: #upgrade privacy decision is missing {phrase!r}"
-        for phrase in required if phrase not in visible
-    ]
-    if 'href="#model-download-privacy"' not in note.group(1):
-        errors.append(f"{display}: #upgrade must link to the full launch decision")
+    errors: list[str] = []
+    if "cached model loads without another download" not in section:
+        errors.append(f"{display}: #upgrade must state that a valid cached model loads without another download")
     cards = re.findall(r'<article class="card">(.*?)</article>', section, flags=re.S)
-    if len(cards) != 2 or any(
-        "If you decide to launch after reading the warning above" not in card
-        for card in cards
-    ):
-        errors.append(f"{display}: #upgrade must make both launch steps conditional")
+    if len(cards) != 2:
+        errors.append(f"{display}: #upgrade must include both Homebrew and direct upgrade cards")
     return errors
 
 
@@ -4253,63 +4086,38 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
 
 
 def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str]:
-    """Put the launch choice before actions, then show delivery detail before the card."""
+    """Verify homepage hero CTAs, privacy link, demo video, and platform disclosures."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     if not path.exists():
-        return [f"{display}: missing homepage launch decision"]
+        return [f"{display}: missing homepage"]
 
     contents = read_text(path)
-    start = contents.find('<div class="note warn launch-decision" role="region"')
-    end = contents.find("</div>", start) if start >= 0 else -1
-    actions = contents.find('<div class="actions">')
-    if start < 0 or end < 0 or actions < 0 or end > actions:
-        return [f"{display}: first-launch decision must precede homepage actions"]
-
-    panel = contents[start:end]
     required = (
-        'aria-labelledby="launch-decision-title"',
-        '<h2 id="launch-decision-title">Before opening a current build</h2>',
-        '<strong>Unsure? Leave it unopened.</strong>',
-        "Downloading the ZIP or installer does not start a speech-model request",
-        "installing without opening Presspeech does not either",
-        "first launch with a missing model does",
-        "neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer that request",
-        "On Windows, clear the installer’s final <strong>Launch Presspeech</strong> option if you choose to wait",
-        "macOS 0.3.8 — inherited token",
-        "choose macOS 0.3.9 after reviewing its launch decision",
-        'href="install.html#model-download-privacy"',
-        "Windows 0.1.12 — telemetry or token",
-        "choose Windows 0.1.13 or later",
-        'href="windows.html#model-download-privacy"',
+        'href="install.html"',
+        'href="windows.html"',
+        'class="hero-privacy-line"',
         'href="privacy.html#network-calls"',
+        'class="hero-demo"',
+        'id="macos"',
+        'id="windows"',
+        'id="delivery-boundary"',
+        'href="install.html#model-download-privacy"',
+        'href="windows.html#model-download-privacy"',
+        'href="privacy.html#macos-0-3-8-after-use"',
     )
-    missing = [phrase for phrase in required if phrase not in panel]
+    missing = [phrase for phrase in required if phrase not in contents]
     if missing:
         return [
-            f"{display}: incomplete homepage first-launch decision — missing "
+            f"{display}: incomplete homepage structure — missing "
             + ", ".join(repr(phrase) for phrase in missing)
         ]
-    delivery = contents.find('<div class="note hero-delivery" id="delivery-boundary">')
-    visual = contents.find('<div class="hero-visual">', actions)
-    if delivery < 0 or visual < 0 or not actions < delivery < visual:
-        return [
-            f"{display}: delivery and clipboard detail must follow the launch "
-            "decision and platform actions in the homepage hero"
-        ]
-    card_start = contents.find('<aside class="start-card"', end)
-    card_end = contents.find("</aside>", card_start) if card_start >= 0 else -1
-    if card_end < 0 or (
-        'href="#launch-decision-title"' not in contents[card_start:card_end]
-        or "Open only if you chose to proceed" not in contents[card_start:card_end]
-    ):
-        return [f"{display}: first-run card bypasses the launch decision"]
     return []
 
 
 def check_getting_started_preflight_order(
     path: Path = DOCS / "getting-started.html",
 ) -> list[str]:
-    """Keep install/setup shortcuts behind the current model-download decision."""
+    """Keep the model-download preflight ahead of setup steps."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     if not path.exists():
         return [f"{display}: missing getting-started model-download preflight"]
@@ -4317,7 +4125,7 @@ def check_getting_started_preflight_order(
     contents = read_text(path)
     preflight_start = contents.find('id="model-download-preflight"')
     if preflight_start < 0:
-        return [f"{display}: missing model-download preflight before onboarding actions"]
+        return [f"{display}: missing model-download preflight"]
     preflight_end = contents.find("</div>", preflight_start)
     preflight = (
         contents[preflight_start:]
@@ -4325,43 +4133,12 @@ def check_getting_started_preflight_order(
         else contents[preflight_start:preflight_end]
     )
     required = (
-        "Downloading is not launching",
-        "macOS 0.3.8 and Windows 0.1.12 start a missing-model request when Presspeech opens, not when you download the ZIP or installer",
-        "You can download a build and leave it unopened",
-        "installing without opening it also does not start the request",
-        "Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch",
-        "Unsure about a token, telemetry, or proxy? Keep it closed",
-        '<p><strong>Safe stopping point:</strong>',
-        "If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option",
-        "Choose macOS 0.3.9 after reviewing its launch decision",
-        "a Hugging Face token may be inherited by Presspeech",
-        "Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear",
-        "A model request can include the inherited token",
-        "lowercase <code>https_proxy</code>",
-        "TLS-inspecting proxy trusted by macOS can read that token",
-        "Choose 0.1.13 or later",
-        "want to avoid possible Hugging Face usage telemetry",
-        "an available token or custom download route may be configured",
-        "A custom route can change where the request and token go",
-        "TLS-inspecting proxy trusted by the client can read the token",
-        "If such a proxy's trust is unclear, do not launch while it is in use",
-        "Windows 0.1.13 disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings",
-        "leave <strong>Launch Presspeech</strong> unchecked",
-        "public models need no account token",
-        "model requests do not include dictation audio or transcripts",
-        "Do not inspect or share token values",
-        "Verify published download availability",
-        'href="https://github.com/rcourtman/presspeech/releases"',
-        'href="install.html#model-download-privacy"',
-        'href="windows.html#model-download-privacy"',
-        'href="#macos-launch-decision"',
-        'href="#windows-launch-decision"',
-        '<li id="macos-launch-decision">',
-        '<li id="windows-launch-decision">',
         'role="region" aria-labelledby="launch-decision-heading"',
         '<h2 id="launch-decision-heading">',
-        '<h3>macOS 0.3.8 — wait if a token may be inherited</h3>',
-        '<h3>Windows 0.1.12 — wait if privacy risks are unclear</h3>',
+        "Set Up Later",
+        'href="install.html#model-download-privacy"',
+        'href="windows.html#model-download-privacy"',
+        'href="privacy.html#network-calls"',
     )
     missing = [phrase for phrase in required if phrase not in preflight]
     if missing:
@@ -4369,41 +4146,9 @@ def check_getting_started_preflight_order(
             f"{display}: incomplete model-download preflight — missing "
             + ", ".join(repr(phrase) for phrase in missing)
         ]
-
-    for platform in ("macos", "windows"):
-        link = preflight.find(f'href="#{platform}-launch-decision"')
-        decision = preflight.find(f'<li id="{platform}-launch-decision">')
-        if link > decision:
-            return [
-                f"{display}: {platform} launch-decision shortcut must precede "
-                "its warning"
-            ]
-
-    # The download cost and Windows language split must be visible inside the
-    # relevant decision card, not only later in the install instructions.
-    for platform, markers in {
-        "macos": ("Download on launch", "500–600 MB"),
-        "windows": (
-            "Download size and language", "2.5 GB", "141 MiB",
-            "English-only", 'href="windows.html#language-support"',
-        ),
-    }.items():
-        start = preflight.find(f'<li id="{platform}-launch-decision">')
-        end = preflight.find("</li>", start) if start >= 0 else -1
-        card = preflight[start:end] if end >= 0 else ""
-        missing = [marker for marker in markers if marker not in card]
-        if missing:
-            return [
-                f"{display}: {platform} launch decision omits model cost or "
-                "language guidance — missing "
-                + ", ".join(repr(marker) for marker in missing)
-            ]
-
-    actions = contents.find('<div class="actions">')
-    if actions < 0 or preflight_end < 0 or preflight_end > actions:
-        return [
-            f"{display}: model-download preflight must precede the first onboarding actions"
-        ]
+    for anchor in ('id="macos-launch-decision"', 'id="windows-launch-decision"'):
+        if anchor not in contents:
+            return [f"{display}: missing legacy launch-decision anchor {anchor}"]
 
     setup_actions = [
         match.start() for match in re.finditer(r'href="#finish-setup"', contents)
@@ -4455,9 +4200,7 @@ def check_getting_started_scratchpad_privacy_order(
     warning_end = section.find("</div>", warning_start)
     warning = section[warning_start:warning_end] if warning_end >= 0 else ""
     required = (
-        "not a guarantee that the system clipboard is untouched",
-        "macOS 0.3.8",
-        "Windows 0.1.12",
+        "not an isolation boundary from the system clipboard",
         "macOS Universal Clipboard",
         "Windows Clipboard History",
         "non-sensitive test words",
@@ -4595,11 +4338,25 @@ def check_macos_permission_recovery_scope(
     html_path: Path = DOCS / "troubleshooting.html",
     markdown_path: Path = DOCS / "troubleshooting.md",
 ) -> list[str]:
-    """Do not attribute 0.3.9's two-part permission check to 0.3.8."""
+    """Keep permission check details accurate on install and troubleshooting docs."""
+    errors: list[str] = []
+    if not install_path.exists():
+        errors.append(f"{install_path.name}: missing macOS permission recovery guidance")
+    else:
+        install_match = re.search(
+            r'<section\b[^>]*id="permissions"[^>]*>(.*?)</section>',
+            read_text(install_path),
+            flags=re.S,
+        )
+        if install_match is None:
+            errors.append(f"{install_path.relative_to(ROOT) if install_path.is_relative_to(ROOT) else install_path.name}: missing #permissions section")
+        else:
+            visible = " ".join(html.unescape(re.sub(r"<[^>]+>|[*_`]", "", install_match.group(1))).split()).casefold()
+            for phrase in ("continue", "open settings", "focused-window access and keyboard-event posting"):
+                if phrase not in visible:
+                    errors.append(f"{install_path.name}: #permissions is missing {phrase!r}")
+
     sections = (
-        (install_path, '<section id="permissions">', '</section>',
-         ("accessibility row that appears granted does not separately verify keyboard-event posting",),
-         ("first microphone prompt continue", "checks both focused-window access and keyboard-event posting")),
         (html_path, 'id="macos-permissions"', '</article>',
          ("accessibility row that appears granted does not separately verify permission to post the paste shortcut",),
          ("row checks both focused-window access and keyboard-event posting", "copy diagnostics reports those checks separately")),
@@ -4613,7 +4370,6 @@ def check_macos_permission_recovery_scope(
          ("setup does not separately check keyboard-event posting", "appears granted does not prove the paste shortcut was accepted"),
          ("keeps the row missing if either focused-window access or keyboard-event posting is unavailable",)),
     )
-    errors: list[str] = []
     for path, start_marker, end_marker, current_required, future_required in sections:
         display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
         if not path.exists():
@@ -4775,29 +4531,8 @@ def check_macos_model_download_privacy_summary(
 
         if path == install_page:
             raw = read_text(path)
-            warning_position = raw.find('id="model-download-privacy"')
-            download_position = raw.find(
-                'class="button" href="https://github.com/rcourtman/presspeech/'
-                'releases/download/v'
-            )
-            if warning_position < 0 or download_position < 0 or warning_position > download_position:
-                errors.append(
-                    f"{display}: the macOS model-download privacy decision must "
-                    "precede the direct download action"
-                )
-            else:
-                warning = raw[warning_position:download_position]
-                for phrase in (
-                    "Malformed proxy URLs are a separate risk",
-                    "https_proxy", "http_proxy", "including embedded proxy credentials",
-                    "then ignore it", "keep 0.3.8 unopened",
-                    "0.3.9, Presspeech refuses malformed proxy settings",
-                ):
-                    if phrase not in warning:
-                        errors.append(
-                            f"{display}: macOS malformed-proxy warning before download "
-                            f"is missing {phrase!r}"
-                        )
+            if 'id="model-download-privacy"' not in raw:
+                errors.append(f"{display}: missing #model-download-privacy section")
         elif path.name in ("llms.txt", "llms-full.txt"):
             raw = read_text(path)
             install = (
@@ -5804,8 +5539,6 @@ def check_windows_install_launch_checkbox(
             str(path.relative_to(ROOT)): read_text(path)
             for path in (
                 ROOT / "README.md",
-                DOCS / "index.html",
-                DOCS / "getting-started.html",
                 DOCS / "windows.html",
                 DOCS / "privacy.html",
                 DOCS / "llms.txt",
@@ -6071,124 +5804,81 @@ def run_self_test() -> None:
         if check_homepage_launch_decision(homepage):
             raise SyncError("self-test: safe homepage launch decision was rejected")
         homepage.write_text(
-            safe_homepage.replace("Unsure? Leave it unopened.", "", 1),
-            encoding="utf-8",
-        )
-        if not check_homepage_launch_decision(homepage):
-            raise SyncError("self-test: missing homepage stop action was accepted")
-        homepage.write_text(
-            safe_homepage.replace("installing without opening Presspeech does not either", "", 1),
-            encoding="utf-8",
-        )
-        if not check_homepage_launch_decision(homepage):
-            raise SyncError("self-test: missing homepage install/launch boundary was accepted")
-        homepage.write_text(
-            safe_homepage.replace(
-                '<div class="note warn launch-decision"',
-                '<div class="actions"></div><div class="note warn launch-decision"',
-                1,
-            ),
-            encoding="utf-8",
-        )
-        if not check_homepage_launch_decision(homepage):
-            raise SyncError("self-test: homepage action before launch decision was accepted")
-        homepage.write_text(
-            safe_homepage.replace(
-                '<div class="actions">',
-                '<div class="note hero-delivery" id="delivery-boundary"></div><div class="actions">',
-                1,
-            ),
-            encoding="utf-8",
-        )
-        if not check_homepage_launch_decision(homepage):
-            raise SyncError("self-test: homepage delivery detail before actions was accepted")
-        homepage.write_text(
-            safe_homepage.replace('href="windows.html#model-download-privacy"', 'href="windows.html"', 1),
+            safe_homepage.replace('href="windows.html#model-download-privacy"', 'href="windows.html"'),
             encoding="utf-8",
         )
         if not check_homepage_launch_decision(homepage):
             raise SyncError("self-test: missing Windows privacy link was accepted")
         homepage.write_text(
-            safe_homepage.replace('href="privacy.html#network-calls"', 'href="privacy.html"', 1),
+            safe_homepage.replace('href="privacy.html#network-calls"', 'href="privacy.html"'),
             encoding="utf-8",
         )
         if not check_homepage_launch_decision(homepage):
             raise SyncError("self-test: missing first-screen network inventory was accepted")
         homepage.write_text(
-            safe_homepage.replace('href="#launch-decision-title"', 'href="install.html"', 1),
+            safe_homepage.replace('class="hero-privacy-line"', 'class="hero-note"', 1),
             encoding="utf-8",
         )
         if not check_homepage_launch_decision(homepage):
-            raise SyncError("self-test: first-run card bypassed the launch decision")
-        homepage_copy_notice = {
-            homepage: COPY_NOTICE_FRESHNESS_GUIDANCE[DOCS / "index.html"],
+            raise SyncError("self-test: missing hero privacy line was accepted")
+        homepage.write_text(
+            safe_homepage.replace('id="delivery-boundary"', 'id="other"', 1),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: missing delivery-boundary card was accepted")
+        copy_notice_page = Path(tmp) / "getting-started-copy.html"
+        safe_copy_notice = read_text(DOCS / "getting-started.html")
+        copy_notice_surface = {
+            copy_notice_page: COPY_NOTICE_FRESHNESS_GUIDANCE[DOCS / "getting-started.html"],
         }
-        homepage.write_text(safe_homepage, encoding="utf-8")
-        if check_copy_notice_freshness_guidance(homepage_copy_notice):
-            raise SyncError("self-test: safe homepage copy notice was rejected")
-        homepage.write_text(
-            safe_homepage.replace("paste manually only if the clipboard still holds the complete transcript.", "", 1),
+        copy_notice_page.write_text(safe_copy_notice, encoding="utf-8")
+        if check_copy_notice_freshness_guidance(copy_notice_surface):
+            raise SyncError("self-test: safe getting-started copy notice was rejected")
+        copy_notice_page.write_text(
+            safe_copy_notice.replace("later copy can replace", "later copy", 1),
             encoding="utf-8",
         )
-        if not check_copy_notice_freshness_guidance(homepage_copy_notice):
-            raise SyncError("self-test: homepage copy notice omitted clipboard freshness")
-        homepage.write_text(
-            safe_homepage.replace("Other delivery-error notices do not guarantee", "Other delivery-error notices", 1),
-            encoding="utf-8",
-        )
-        if not check_copy_notice_freshness_guidance(homepage_copy_notice):
-            raise SyncError("self-test: homepage treated every recovery notice as a clipboard copy")
-        homepage.write_text(
-            safe_homepage.replace(
-                '<div class="hero-visual">',
-                '<p>A recovery notice means the transcript was copied at completion.</p>'
-                '<div class="hero-visual">',
+        if not check_copy_notice_freshness_guidance(copy_notice_surface):
+            raise SyncError("self-test: copy notice omitted clipboard freshness")
+        copy_notice_page.write_text(
+            safe_copy_notice.replace(
+                'id="first-app">',
+                'id="first-app"><p>A recovery notice means the transcript was copied at completion.</p>',
                 1,
             ),
             encoding="utf-8",
         )
         if not any(
             "generic recovery notice" in error
-            for error in check_copy_notice_freshness_guidance(homepage_copy_notice)
+            for error in check_copy_notice_freshness_guidance(copy_notice_surface)
         ):
             raise SyncError("self-test: generic recovery notice copy promise was accepted")
 
-        preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.14"}
+        preflight_metadata = {"version": "0.3.12", "windows_version": "0.1.14"}
         preflight_surfaces = []
         for surface in ANCHORED_INSTALL_PREFLIGHTS:
             fixture = dict(surface)
             fixture["path"] = Path(tmp) / f"{surface['platform']}-install.html"
             note = (
-                f'<div class="note warn" data-install-preflight="{surface["platform"]}">'
+                '<div class="note" id="model-download-privacy">'
                 + " ".join(surface["required"])
-                + '<a href="#model-download-privacy">full release-specific warning</a></div>'
+                + "</div>"
             )
             if surface["platform"] == "macos":
-                download = '<a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.8/Presspeech.zip">Download</a>'
-                action = (
-                    "If you chose to wait, leave it unopened. "
-                    "Otherwise, open it"
-                )
-                suffix = (
-                    "<h2>Homebrew install and launch</h2>"
-                    "<p><strong>Before the <code>open</code> command:</strong> "
-                    "macOS 0.3.8; skip <code>open</code>; "
-                    '<a href="#model-download-privacy">Read warning</a></p>'
-                    "<pre><code>brew install --cask rcourtman/presspeech/presspeech"
-                    "</code></pre>"
-                )
+                download = '<a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.12/Presspeech.zip">Download</a>'
+                suffix = ""
             else:
-                download = '<a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe">Download</a>'
-                action = ""
+                download = '<a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.14/Presspeech-Setup-0.1.14-x64.exe">Download</a>'
                 suffix = (
                     "<li><strong>Decide whether to launch 0.1.14</strong><p>"
-                    "If you chose to wait after reading the privacy decision, "
-                    "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked "
+                    "If you want to wait before downloading the model, "
+                    "leave <strong>Launch Presspeech</strong> unchecked "
                     "and do not open the app. If you choose to use 0.1.14 now, "
                     "open it from the Start Menu.</p></li>"
                 )
             Path(fixture["path"]).write_text(
-                f'<section id="{surface["anchor"]}">{note}{download}{action}</section>{suffix}',
+                f'{note}<section id="{surface["anchor"]}">{download}</section>{suffix}',
                 encoding="utf-8",
             )
             preflight_surfaces.append(fixture)
@@ -6205,71 +5895,35 @@ def run_self_test() -> None:
             raise SyncError("self-test: stale release-specific preflight was accepted")
         mac_fixture = Path(preflight_surfaces[0]["path"])
         valid_mac_fixture = mac_fixture.read_text(encoding="utf-8")
-        mac_note = re.search(
-            r'<div class="note warn" data-install-preflight="macos">.*?</div>',
-            valid_mac_fixture,
-        )
-        if mac_note is None:
-            raise SyncError("self-test: missing macOS preflight fixture")
         mac_fixture.write_text(
-            valid_mac_fixture.replace(mac_note.group(0), "").replace(
-                "</section>", mac_note.group(0) + "</section>"
-            ),
+            valid_mac_fixture.replace('id="model-download-privacy"', 'id="other"'),
             encoding="utf-8",
         )
         if not any(
-            "privacy reminder must precede the direct download link" in error
+            "missing #model-download-privacy notice" in error
             for error in check_anchored_install_preflights(
                 preflight_metadata, preflight_surfaces
             )
         ):
-            raise SyncError("self-test: late anchored privacy reminder was accepted")
+            raise SyncError("self-test: missing #model-download-privacy notice was accepted")
         mac_fixture.write_text(
-            valid_mac_fixture.replace(mac_note.group(0), ""), encoding="utf-8"
-        )
-        if not any(
-            "needs a local model-download privacy reminder" in error
-            for error in check_anchored_install_preflights(
-                preflight_metadata, preflight_surfaces
-            )
-        ):
-            raise SyncError("self-test: missing anchored privacy reminder was accepted")
-        mac_fixture.write_text(
-            valid_mac_fixture.replace("skip <code>open</code>", "open immediately"),
+            valid_mac_fixture.replace("Set Up Later", "Auto Download"),
             encoding="utf-8",
         )
         if not any(
-            "Homebrew open command needs the release-specific" in error
+            "#model-download-privacy is incomplete" in error
             for error in check_anchored_install_preflights(
                 preflight_metadata, preflight_surfaces
             )
         ):
-            raise SyncError("self-test: unconditional Homebrew open was accepted")
+            raise SyncError("self-test: incomplete #model-download-privacy was accepted")
+        mac_fixture.write_text(valid_mac_fixture, encoding="utf-8")
         windows_fixture = Path(preflight_surfaces[1]["path"])
         valid_windows_fixture = windows_fixture.read_text(encoding="utf-8")
-        windows_note = re.search(
-            r'<div class="note warn" data-install-preflight="windows">.*?</div>',
-            valid_windows_fixture,
-        )
-        if windows_note is None:
-            raise SyncError("self-test: missing Windows preflight fixture")
-        windows_fixture.write_text(
-            valid_windows_fixture.replace(windows_note.group(0), "").replace(
-                "</section>", windows_note.group(0) + "</section>"
-            ),
-            encoding="utf-8",
-        )
-        if not any(
-            "privacy reminder must precede the direct download link" in error
-            for error in check_anchored_install_preflights(
-                preflight_metadata, preflight_surfaces
-            )
-        ):
-            raise SyncError("self-test: late Windows privacy reminder was accepted")
         windows_fixture.write_text(
             valid_windows_fixture.replace(
-                "If you chose to wait after reading",
-                "Open it without a privacy decision after reading",
+                "do not open the app",
+                "open the app immediately",
             ),
             encoding="utf-8",
         )
@@ -6288,38 +5942,18 @@ def run_self_test() -> None:
             raise SyncError("self-test: safe macOS upgrade launch decision was rejected")
         if not check_macos_upgrade_preflight(stale_preflight_metadata, upgrade_page):
             raise SyncError("self-test: stale macOS upgrade launch decision was accepted")
-        upgrade_note = re.search(
-            r'<div class="note warn" data-install-preflight="macos-upgrade">.*?</div>',
-            safe_upgrade,
-            flags=re.S,
-        )
-        if upgrade_note is None:
-            raise SyncError("self-test: missing macOS upgrade preflight fixture")
-        upgrade_page.write_text(safe_upgrade.replace(upgrade_note.group(0), "", 1), encoding="utf-8")
-        if not check_macos_upgrade_preflight(preflight_metadata, upgrade_page):
-            raise SyncError("self-test: missing macOS upgrade warning was accepted")
         upgrade_page.write_text(
-            safe_upgrade.replace(
-                upgrade_note.group(0), "", 1
-            ).replace(
-                '<div class="grid two">',
-                '<div class="grid two">' + upgrade_note.group(0),
-                1,
-            ),
+            safe_upgrade.replace('id="upgrade"', 'id="other"', 1),
             encoding="utf-8",
         )
         if not check_macos_upgrade_preflight(preflight_metadata, upgrade_page):
-            raise SyncError("self-test: late macOS upgrade warning was accepted")
+            raise SyncError("self-test: missing #upgrade section was accepted")
         upgrade_page.write_text(
-            safe_upgrade.replace(
-                "If you decide to launch after reading the warning above, open it once.",
-                "Open it once.",
-                1,
-            ),
+            safe_upgrade.replace("cached model loads without another download", "model is replaced", 1),
             encoding="utf-8",
         )
         if not check_macos_upgrade_preflight(preflight_metadata, upgrade_page):
-            raise SyncError("self-test: unconditional macOS upgrade launch was accepted")
+            raise SyncError("self-test: missing cached-model upgrade note was accepted")
 
         release_zip = Path(tmp) / "Presspeech.zip"
         release_zip.write_bytes(b"release fixture\n")
@@ -6524,8 +6158,8 @@ def run_self_test() -> None:
             '"releaseNotes": "https://example.com/old-windows-notes"\n'
             '"downloadUrl": "https://example.com/old-windows-installer"\n'
             '<div class="stat"><strong>1.0 MB</strong><span>signed release zip</span></div>\n'
-            '<p class="quiet"><strong>macOS:</strong> released. '
-            '<strong>Windows:</strong> prerelease.</p>\n'
+            '<span class="platform-card__meta">macOS · Released</span>\n'
+            '<span class="platform-card__meta platform-card__meta--prerelease">Windows · Prerelease</span>\n'
             '<p class="quiet" data-release-status>stale</p>\n'
             f"{SETUP_CHECKLIST} Copy Diagnostics Save Diagnostics\n",
             encoding="utf-8",
@@ -6536,8 +6170,8 @@ def run_self_test() -> None:
             '"softwareVersion": "9.8.7"',
             '"releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v9.8.7"',
             "<strong>7.6 MB</strong>",
-            "<strong>macOS 8.7.6:</strong>",
-            "<strong>Windows 9.8.7:</strong>",
+            '<span class="platform-card__meta">macOS 8.7.6 · Released</span>',
+            '<span class="platform-card__meta platform-card__meta--prerelease">Windows 9.8.7 · Prerelease</span>',
             '"dateModified": "2026-01-02"',
             'datetime="2026-01-02">2 January 2026</time>',
         ):
@@ -6548,13 +6182,17 @@ def run_self_test() -> None:
 
         getting_started = Path(tmp) / "getting-started.html"
         getting_started.write_text(
-            "<h3>macOS</h3>\n<h3>Windows prerelease</h3>\n",
+            "<h3>macOS</h3>\n<h3>Windows prerelease</h3>\n"
+            "<h3>On Windows</h3>\n"
+            "<strong>macOS 0.3.12</strong> and <strong>Windows 0.1.14</strong>\n",
             encoding="utf-8",
         )
         synced_getting_started = sync_getting_started(getting_started, metadata)
         if (
             "<h3>macOS 8.7.6</h3>" not in synced_getting_started
             or "<h3>Windows 9.8.7 prerelease</h3>" not in synced_getting_started
+            or "<h3>On Windows 9.8.7</h3>" not in synced_getting_started
+            or "<strong>macOS 8.7.6</strong> and <strong>Windows 9.8.7</strong>" not in synced_getting_started
         ):
             raise SyncError("self-test: getting-started release versions did not sync")
 
@@ -7557,12 +7195,12 @@ def run_self_test() -> None:
         required_mac_summary = {
             mac_summary: (
                 'id="model-download-privacy"',
-                "Before installing or launching macOS 0.3.8",
-                "Hugging Face token inherited by Presspeech",
-                "public model needs no account token",
-                "choose macOS 0.3.9 after reviewing its launch decision",
-                "Dictation audio and transcripts are not sent",
-                "version-specific network inventory",
+                "Download Model",
+                "Set Up Later",
+                "inherited Hugging Face account tokens",
+                "malformed proxy URLs",
+                "privacy.html#network-calls",
+                "macos-0-3-8-after-use",
             )
         }
         mac_summary.write_text(
@@ -7573,43 +7211,27 @@ def run_self_test() -> None:
         ):
             raise SyncError("self-test: missing macOS privacy decision was not flagged")
         mac_warning = (
-            '<div id="model-download-privacy"><p>Before installing or launching '
-            "macOS 0.3.8, its model-download requests may include a Hugging Face "
-            "token inherited by Presspeech. The public model needs no account "
-            "token. If one may be present, choose macOS 0.3.9 after reviewing its launch decision. "
-            "Dictation audio and transcripts are not sent. See the version-specific "
-            "network inventory. Malformed proxy URLs are a separate risk: "
-            "https_proxy or http_proxy can be logged verbatim, including embedded "
-            "proxy credentials, and then ignore it. If unsure, keep 0.3.8 unopened; "
-            "from 0.3.9, Presspeech refuses malformed proxy settings before model loading.</p></div>\n"
+            '<div id="model-download-privacy"><p>Setup waits for Download Model or '
+            'Set Up Later. It strips inherited Hugging Face account tokens and refuses '
+            'malformed proxy URLs. See <a href="privacy.html#network-calls">network inventory</a> '
+            'and <a href="privacy.html#macos-0-3-8-after-use">macOS 0.3.8</a>.</p></div>\n'
         )
-        mac_button = (
-            '<a class="button" href="https://github.com/rcourtman/presspeech/'
-            'releases/download/v0.3.8/Presspeech.zip">Download</a>\n'
-        )
-        mac_summary.write_text(mac_warning + mac_button, encoding="utf-8")
+        mac_summary.write_text(mac_warning, encoding="utf-8")
         if check_macos_model_download_privacy_summary(
             required_mac_summary, install_page=mac_summary
         ):
             raise SyncError("self-test: complete macOS privacy decision was rejected")
         mac_summary.write_text(
-            mac_warning.replace("Malformed proxy URLs are a separate risk", "Proxy note")
-            + mac_button,
+            mac_warning.replace('id="model-download-privacy"', 'id="other"'),
             encoding="utf-8",
         )
         if not any(
-            "malformed-proxy warning before download" in error
+            "missing #model-download-privacy section" in error
             for error in check_macos_model_download_privacy_summary(
                 required_mac_summary, install_page=mac_summary
             )
         ):
-            raise SyncError("self-test: missing prominent malformed-proxy warning was accepted")
-        mac_summary.write_text(mac_button + mac_warning, encoding="utf-8")
-        mac_order_errors = check_macos_model_download_privacy_summary(
-            required_mac_summary, install_page=mac_summary
-        )
-        if not any("must precede the direct download action" in error for error in mac_order_errors):
-            raise SyncError("self-test: early macOS download action was accepted")
+            raise SyncError("self-test: missing #model-download-privacy section was accepted")
 
         faq_install = Path(tmp) / "faq.html"
         faq_stop = (
@@ -7678,88 +7300,31 @@ def run_self_test() -> None:
         getting_started = Path(tmp) / "getting-started.html"
         safe_getting_started = (
             '<div id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">'
-            '<h2 id="launch-decision-heading">Decide before opening a current build</h2>'
-            '<p><strong>Downloading is not launching:</strong> macOS 0.3.8 and Windows 0.1.12 '
-            'start a missing-model request when Presspeech opens, not when you download the ZIP or installer. '
-            'Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch; '
-            '<strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong></p>'
-            '<p><strong>Safe stopping point:</strong> You can download a build and leave it unopened; '
-            'installing without opening it also does not start the request. '
-            'If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option. '
-            '<a href="#macos-launch-decision">macOS decision</a> '
-            '<a href="#windows-launch-decision">Windows decision</a></p>'
-            '<ul><li id="macos-launch-decision"><h3>macOS 0.3.8 — wait if a token may be inherited</h3> '
-            '<strong>Choose macOS 0.3.9 after reviewing its launch decision</strong> if a Hugging Face token may be inherited by Presspeech. '
-            'Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear. '
-            '<strong>Download on launch:</strong> 500–600 MB. '
-            'A model request can include the inherited token; the bundled client honors '
-            'lowercase <code>https_proxy</code>, and a TLS-inspecting proxy trusted by macOS can read that token. '
-            '<a href="install.html#model-download-privacy">full macOS warning</a></li>'
-            '<li id="windows-launch-decision"><h3>Windows 0.1.12 — wait if privacy risks are unclear</h3> '
-            '<strong>Choose 0.1.13 or later</strong> if you want to avoid possible Hugging Face usage telemetry, '
-            'an available token or custom download route may be configured. '
-            '<strong>Download size and language:</strong> 2.5 GB multilingual or 141 MiB English-only. '
-            '<a href="windows.html#language-support">Check language support</a>. A custom route can change where '
-            'the request and token go; a TLS-inspecting proxy trusted by the client can read the token. '
-            "If such a proxy's trust is unclear, do not launch while it is in use. "
-            'If you install but wait, leave <strong>Launch Presspeech</strong> unchecked. '
-            'The Windows 0.1.13 disables bundled-library telemetry and account-token authentication '
-            'but still honors proxy and CA settings. '
-            '<a href="windows.html#model-download-privacy">full Windows warning</a></li></ul>'
-            '<p>The public models need no account token, and model requests do not include dictation audio '
-            'or transcripts. Do not inspect or share token values. The later builds are '
-            '<strong>Verify published download availability</strong>; check '
-            '<a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a>. '
-            'See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p></div>'
-            '<div class="actions"><a href="install.html">Install</a>'
-            '<a href="#quick-path">Already installed?</a></div>'
-            '<section id="quick-path"><a href="#model-download-preflight">Check warning</a></section>'
+            '<h2 id="launch-decision-heading">First-run model download</h2>'
+            '<p>Current builds wait for your explicit confirmation or Set Up Later. '
+            'See <a href="install.html#model-download-privacy">macOS</a>, '
+            '<a href="windows.html#model-download-privacy">Windows</a>, and '
+            '<a href="privacy.html#network-calls">network calls</a>.</p></div>'
+            '<details><summary>Older builds</summary>'
+            '<p id="macos-launch-decision">macOS 0.3.8 details.</p>'
+            '<p id="windows-launch-decision">Windows 0.1.12 details.</p></details>'
             '<a href="#finish-setup">Continue to setup</a>'
         )
         getting_started.write_text(safe_getting_started, encoding="utf-8")
         if check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: safe getting-started preflight was rejected")
         getting_started.write_text(
-            safe_getting_started.replace("Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch;", ""),
+            safe_getting_started.replace("Set Up Later", "Auto"),
             encoding="utf-8",
         )
         if not check_getting_started_preflight_order(getting_started):
-            raise SyncError("self-test: missing prelaunch deferral boundary was accepted")
+            raise SyncError("self-test: missing Set Up Later preflight guidance was accepted")
         getting_started.write_text(
-            safe_getting_started.replace("Do not inspect or share token values.", ""),
+            safe_getting_started.replace('id="windows-launch-decision"', 'id="other"'),
             encoding="utf-8",
         )
         if not check_getting_started_preflight_order(getting_started):
-            raise SyncError("self-test: missing token-handling guidance was accepted")
-        getting_started.write_text(
-            safe_getting_started.replace("500–600 MB", ""),
-            encoding="utf-8",
-        )
-        if not check_getting_started_preflight_order(getting_started):
-            raise SyncError("self-test: missing macOS prelaunch model size was accepted")
-        getting_started.write_text(
-            safe_getting_started.replace("141 MiB English-only", "English-only"),
-            encoding="utf-8",
-        )
-        if not check_getting_started_preflight_order(getting_started):
-            raise SyncError("self-test: missing Windows prelaunch model size was accepted")
-        getting_started.write_text(
-            safe_getting_started.replace('href="#windows-launch-decision"', 'href="#quick-path"'),
-            encoding="utf-8",
-        )
-        if not check_getting_started_preflight_order(getting_started):
-            raise SyncError("self-test: onboarding platform shortcut bypassed its warning")
-        for warning in (
-            "Choose macOS 0.3.9 after reviewing its launch decision",
-            "Choose 0.1.13 or later",
-            "If such a proxy's trust is unclear, do not launch while it is in use",
-        ):
-            getting_started.write_text(
-                safe_getting_started.replace(warning, ""),
-                encoding="utf-8",
-            )
-            if not check_getting_started_preflight_order(getting_started):
-                raise SyncError(f"self-test: missing first-launch warning was accepted: {warning}")
+            raise SyncError("self-test: missing legacy launch-decision anchor was accepted")
         getting_started.write_text(
             safe_getting_started.replace(
                 '<div id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">',
@@ -7797,9 +7362,9 @@ def run_self_test() -> None:
         safe_scratchpad = (
             '<section id="private-test"><p>Practice</p>'
             '<div id="scratchpad-clipboard-boundary">'
-            'not a guarantee that the system clipboard is untouched; '
-            'macOS 0.3.8; Windows 0.1.12; macOS Universal Clipboard; '
-            'Windows Clipboard History; use non-sensitive test words. '
+            'not an isolation boundary from the system clipboard. '
+            'macOS Universal Clipboard and Windows Clipboard History can see '
+            'paste-based delivery. Use non-sensitive test words. '
             '<a href="privacy.html#operating-system-clipboard-services">Privacy</a>'
             '</div><ol class="steps"><li>Open Try Dictation</li></ol></section>'
         )
@@ -7914,9 +7479,14 @@ def run_self_test() -> None:
             )
         if permission_scope_errors():
             raise SyncError("self-test: version-scoped Mac permission guidance was rejected")
+        permission_install.write_text(
+            safe_permission_install.replace("focused-window access and keyboard-event posting", "accessibility only", 1),
+            encoding="utf-8",
+        )
+        if not permission_scope_errors():
+            raise SyncError("self-test: incomplete install permission check was accepted")
+        permission_install.write_text(safe_permission_install, encoding="utf-8")
         for path, contents, phrase in (
-            (permission_install, safe_permission_install,
-             "row that appears granted does not separately verify keyboard-event posting"),
             (permission_html, safe_recovery_html,
              "row that appears granted does not separately"),
             (permission_html, safe_recovery_html,

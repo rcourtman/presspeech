@@ -131,25 +131,14 @@
       <div class="wrap hero">
         <div class="hero-copy">
           <h1>Private push-to-talk dictation for Mac and Windows.</h1>
-          <p>Hold a key, speak, and release—or choose <strong>Press to toggle</strong>. Presspeech transcribes locally, with no account or cloud transcription. Before opening a current build, review the model-download decision below.</p>
-          <p class="quiet"><strong>macOS 0.3.12:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.14:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
-          <div class="note warn launch-decision" role="region" aria-labelledby="launch-decision-title">
-            <h2 id="launch-decision-title">Before opening a current build</h2>
-            <p class="decision-lead"><strong>Unsure? Leave it unopened.</strong> Downloading the ZIP or installer does not start a speech-model request; installing without opening Presspeech does not either; for older macOS 0.3.8 and Windows 0.1.12, first launch with a missing model does, and neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer that request (macOS 0.3.9 and later ask first on a clean install). On Windows, clear the installer’s final <strong>Launch Presspeech</strong> option if you choose to wait. It starts checked by default; confirm it is clear before choosing <strong>Finish</strong>.</p>
-            <p><strong>Windows 0.1.13:</strong> Setup asks before either missing first-run default model download and offers <strong>Set Up Later</strong>. A complete cached model loads without a transfer. Account-token authentication and bundled Hub telemetry are disabled; configured proxy and CA settings still apply.</p>
-            <ul>
-              <li><strong>macOS 0.3.8 — inherited token or proxy URL:</strong> A missing-model request may include a Hugging Face token. If one may be inherited, or you are unsure, choose macOS 0.3.9 after reviewing its launch decision. Do not launch through a TLS-inspecting proxy whose trust is unclear. A malformed inherited proxy URL may also be logged verbatim, including any embedded credentials, and ignored; if you depend on a proxy and are unsure its URL is valid, leave 0.3.8 unopened. <a href="install.html#model-download-privacy">Read the full macOS launch decision.</a></li>
-              <li><strong>Windows 0.1.12 — telemetry or token:</strong> A missing-model request may send Hugging Face usage telemetry or an available token; custom routing can change its destination. First-run Setup also briefly opens the selected microphone for an automatic local readiness check. If you want to avoid possible telemetry, a token or custom route may be configured, or you are unsure, choose Windows 0.1.13 or later. Do not launch through a TLS-inspecting proxy whose trust is unclear. <a href="windows.html#model-download-privacy">Read the full Windows launch decision.</a></li>
-            </ul>
-            <p class="launch-inventory"><a href="privacy.html#network-calls">Review the version-specific network-call inventory</a> before choosing to launch.</p>
-          </div>
+          <p>Hold a key or press to toggle, speak, and release. Presspeech transcribes locally on your computer with no account, no cloud audio upload, and an MIT license.</p>
           <div class="actions">
-            <a class="button" href="#macos">Check the macOS release</a>
-            <a class="button secondary" href="#windows">Check the Windows prerelease</a>
+            <a class="button" href="install.html">Download for Mac</a>
+            <a class="button secondary" href="windows.html">Windows prerelease</a>
           </div>
-          <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Follow the four-checkpoint first-dictation guide</a>.</p>
-          <div class="note hero-delivery" id="delivery-boundary">
-            <p><strong>Before dictating into another app:</strong> Keep the starting field and tab selected until delivery finishes. The published builds verify the original window, not a field or browser tab in the same window. If Presspeech cannot safely verify the destination, it avoids automatic paste. <strong>Check before recovering:</strong> On macOS 0.3.8 and published Windows 0.1.12, a copied notice means the transcript was copied at completion, but a later copy can replace it. Other delivery-error notices do not guarantee that the clipboard holds the transcript or that the field received nothing. Check the intended field first; paste manually only if the clipboard still holds the complete transcript. See the <a href="getting-started.html">first-dictation guide</a> for recovery steps.</p>
+          <div class="hero-brew" aria-label="Homebrew install command">
+            <span class="prompt" aria-hidden="true">$</span>
+            <code>brew install --cask rcourtman/presspeech/presspeech</code>
           </div>
           <div class="stat-row" aria-label="macOS release and benchmark summary">
             <div class="stat"><strong>~100 ms</strong><span>model transcription on benchmark clips</span></div>
@@ -157,108 +146,106 @@
             <div class="stat"><strong>~80 MB</strong><span>RAM while idle</span></div>
             <div class="stat"><strong>0% CPU</strong><span>between dictations</span></div>
           </div>
+          <p class="hero-privacy-line">Clean installs ask before downloading the local ~600 MB speech model. Dictation audio and transcripts stay on your machine. <a href="privacy.html#network-calls">Review every network call</a>.</p>
         </div>
         <div class="hero-visual">
-          <aside class="start-card" aria-labelledby="first-run-title">
-            <span class="section-eyebrow">First run</span>
-            <h2 id="first-run-title">Four checkpoints to your first dictation</h2>
-            <ol class="start-card__steps" role="list">
-              <li><span class="start-card__number" aria-hidden="true">1</span><span><strong>Decide, then install</strong><small>Read the <a href="#launch-decision-title">launch warning</a> and choose your build.</small></span></li>
-              <li><span class="start-card__number" aria-hidden="true">2</span><span><strong>Reach Ready</strong><small>Open only if you chose to proceed; finish setup and let the model load.</small></span></li>
-              <li><span class="start-card__number" aria-hidden="true">3</span><span><strong>Try the in-app test</strong><small>Use harmless words in Presspeech's scratchpad.</small></span></li>
-              <li><span class="start-card__number" aria-hidden="true">4</span><span><strong>Verify one simple app</strong><small>Use a blank TextEdit or Notepad field; check for one complete insertion.</small></span></li>
-            </ol>
-            <p class="start-card__caution"><strong>A copied notice is not an automatic-paste pass.</strong> Check the field before recovering; use the <a href="app-compatibility.html">repeated target-app check</a> before relying on another app.</p>
-            <a class="start-card__link" href="getting-started.html">Follow the first-dictation guide <span aria-hidden="true">→</span></a>
-          </aside>
+          <div class="hero-demo">
+            <figure class="hero-demo-figure">
+              <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release, and Presspeech pastes the local transcript into TextEdit." aria-describedby="demo-video-description">
+                <source src="demo-video.webm" type="video/webm">
+                <source src="demo-video.mp4" type="video/mp4">
+                <p>Your browser cannot play the demo video. Hold Right Option, speak, and release to transcribe locally and paste into the focused window, or recover manually from the clipboard if focus changed.</p>
+              </video>
+              <figcaption class="hero-demo__caption demo-figure__caption" id="demo-video-description"><strong>Silent walkthrough:</strong> Hold Right Option, speak, and release. After local transcription, Presspeech pastes into the focused TextEdit window or keeps the transcript ready for manual recovery if focus changed.</figcaption>
+            </figure>
+          </div>
         </div>
       </div>
+
+      <section class="band-tint">
+        <div class="wrap">
+          <span class="section-eyebrow">How it works</span>
+          <h2>Four steps from install to dictation</h2>
+          <ol class="steps-strip" role="list">
+            <li>
+              <strong>Install the app</strong>
+              <span>Download the signed macOS release or verify the Windows prerelease installer.</span>
+            </li>
+            <li>
+              <strong>Approve model and permissions</strong>
+              <span>Clean installs ask before downloading the local speech model. Complete microphone and input permissions in Setup.</span>
+            </li>
+            <li>
+              <strong>Test in the scratchpad</strong>
+              <span>Open Try Dictation and speak a harmless practice sentence to confirm local transcription.</span>
+            </li>
+            <li>
+              <strong>Dictate anywhere</strong>
+              <span>Hold Right Option on Mac or Right Alt on Windows, speak, and release. Press to toggle is built in too.</span>
+            </li>
+          </ol>
+          <p class="next-step"><a href="getting-started.html">Read the first-dictation guide</a> for step-by-step setup and target-app verification.</p>
+        </div>
+      </section>
 
       <section>
         <div class="wrap">
           <span class="section-eyebrow">Choose your platform</span>
-          <h2>Choose the build that matches your computer</h2>
+          <h2>Choose the build for your computer</h2>
           <div class="grid two">
-            <article class="card">
-              <h3 id="macos">macOS — released</h3>
-              <p>The signed and notarised Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The 0.3.8 release starts a missing 500–600 MB local model download on launch, while 0.3.9 and later ask first on a clean install; a valid cached model loads without another download.</p>
-              <div class="note warn">
-                <p><strong>Before opening macOS 0.3.8:</strong> a missing-model request may include a Hugging Face token inherited by Presspeech; an inherited lowercase <code>https_proxy</code> can route it through a TLS-inspecting proxy trusted by macOS. If a token may be present—or you are unsure—choose macOS 0.3.9 after reviewing its launch decision. If the proxy's trust is unclear, do not launch 0.3.8 while it is in use. Downloading the ZIP does not start the request, so you can leave the app unopened. The public model needs no token; dictation audio and transcripts are not sent. Read the <a href="install.html#model-download-privacy">full macOS warning</a> before deciding to launch.</p>
-                <p><a href="privacy.html#macos-0-3-8-after-use">Already used macOS 0.3.8? See what to do before another model download.</a></p>
+            <article class="card platform-card">
+              <span class="platform-card__meta">macOS 0.3.12 · Released</span>
+              <h3 id="macos">Presspeech for macOS</h3>
+              <p>Signed and notarised native Swift menu-bar app for Apple Silicon Macs on macOS 14 or later. Runs multilingual NVIDIA Parakeet TDT v3 on the Apple Neural Engine, with opt-in Parakeet Ultra in Settings. Clean installs ask before downloading the ~500-600 MB model.</p>
+              <div class="platform-card__footer">
+                <a class="button" href="install.html">Install on macOS</a>
               </div>
-              <p><a href="install.html">Review macOS requirements, privacy, and install steps</a></p>
             </article>
-            <article class="card">
-              <h3 id="windows">Windows — prerelease</h3>
-              <p>The currently unsigned x64 installer is for evaluation on Windows 11 (recommended) or Windows 10 only while your specific edition remains supported or is enrolled in applicable Extended Security Updates. Microsoft <a href="https://learn.microsoft.com/en-us/windows/release-health/release-information">ended general support for Windows 10 on 14 October 2025</a>. Allow about 4.4 GB for the app, plus a first model download of about 2.5 GB with usable NVIDIA CUDA (multilingual Parakeet) or 141 MiB on CPU (English-only Whisper base.en). Published 0.1.12 starts a missing selected model download on launch. Other local models remain selectable.</p>
-              <div class="note warn">
-                <p><strong>Before opening Windows 0.1.12:</strong> model downloads may send Hugging Face usage telemetry and an already-configured or locally saved token. Custom routing can change the request destination; a TLS-inspecting HTTPS proxy trusted by the client can read a token it receives. If you want to avoid possible telemetry, a token or custom route may be configured, or you are unsure, choose 0.1.13 or later. If a TLS-inspecting proxy's trust is unclear, do not launch while it is in use. Downloading the installer and checksum does not start a model request; if you install but wait, leave <strong>Launch Presspeech</strong> unchecked. The public models need no token; dictation audio and transcripts are not sent. Read the <a href="windows.html#model-download-privacy">full Windows warning</a> before deciding to launch.</p>
-                <p><strong>Already used Windows 0.1.12?</strong> If a model download ran with a token available and an inherited <code>HF_ENDPOINT</code> or staging setting may have sent it to a destination you do not trust—or an untrusted TLS-inspecting HTTPS proxy could read the request—treat the token as disclosed to that destination or proxy. A proxy that only tunnels HTTPS cannot read the token. <a href="https://huggingface.co/settings/token">Revoke the token and create a replacement at Hugging Face Access Tokens</a>; do not include token values in logs or support requests.</p>
+            <article class="card platform-card">
+              <span class="platform-card__meta platform-card__meta--prerelease">Windows 0.1.14 · Prerelease</span>
+              <h3 id="windows">Presspeech for Windows</h3>
+              <p>Unsigned x64 installer for Windows 11 (recommended) or Windows 10 editions still covered by security updates or Extended Security Updates. Allow about 4.4 GB for the app, plus ~2.5 GB for multilingual Parakeet on NVIDIA CUDA or ~141 MiB for English-only Whisper base.en on CPU. Setup asks before downloading and disables Hub telemetry and account tokens.</p>
+              <div class="platform-card__footer">
+                <a class="button secondary" href="windows.html">Review Windows install guide</a>
               </div>
-              <p class="quiet">Windows may block an unsigned installer, especially under Smart App Control or managed policy. Review the verification and security guidance before downloading; do not bypass a policy block.</p>
-              <p><a href="windows.html">Review Windows requirements, privacy, and verification steps</a></p>
             </article>
           </div>
+          <details class="disclosure">
+            <summary>Using an older build (macOS 0.3.8 or Windows 0.1.12)?</summary>
+            <p>Older builds started missing-model downloads on first launch without a Setup deferral prompt and could attach inherited Hugging Face tokens or Windows library telemetry. Review the <a href="privacy.html#macos-0-3-8-after-use">macOS 0.3.8 follow-up guidance</a>, <a href="install.html#model-download-privacy">macOS model-download privacy notes</a>, and <a href="windows.html#model-download-privacy">Windows model-download privacy notes</a> before downloading again.</p>
+          </details>
           <p class="quiet" data-release-status>Current published downloads: macOS 0.3.12 and Windows 0.1.14 prerelease. Install metadata updated <time datetime="2026-11-23">23 November 2026</time>.</p>
         </div>
       </section>
 
-      <section>
+      <section class="band-tint">
         <div class="wrap">
-          <span class="section-eyebrow">The whole workflow</span>
-          <h2>Hold. Speak. Release.</h2>
-          <p>The video below shows the macOS build with its default <strong>Right Option</strong> hotkey. On Windows, use the same hold–speak–release gesture with <strong>Right Alt</strong> by default; if that key acts as AltGr for your keyboard layout, Setup lets you choose F8 or another available key. <strong>Press to toggle</strong> is available in macOS Settings → Dictation → Trigger and in Windows Settings.</p>
-          <figure class="demo-figure">
-            <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — Presspeech checks the original window before pasting." aria-describedby="demo-video-description">
-              <source src="demo-video.webm" type="video/webm">
-              <source src="demo-video.mp4" type="video/mp4">
-              <p>Your browser cannot play the demo video. The workflow is: hold Right Option, speak, and release; Presspeech checks the original window before pasting. If it cannot verify the window, the published build copies the transcript at completion for manual recovery. Check that the clipboard still holds it before pasting. Keep the starting field and tab selected until delivery finishes.</p>
-            </video>
-            <figcaption class="demo-figure__caption" id="demo-video-description"><strong>Silent visual walkthrough:</strong> Right Option is held while Presspeech shows that it is listening, then released. After local transcription, the complete sentence appears in the same TextEdit document. If Presspeech cannot verify the original window, the published build copies the transcript at completion for manual recovery; paste only if the clipboard still holds it. A field or browser tab switch inside that window may go undetected, so keep the starting field and tab selected.</figcaption>
-          </figure>
-          <div class="note">
-            <p><strong>Check an app before relying on automatic paste.</strong> Target apps, including browser editors, Electron/Chromium apps, terminal-based editors, and remote sessions, expose focus and paste behavior differently. On macOS 0.3.8, some Electron/Chromium apps can show the copied/manual-paste notice even when focus looks unchanged; that is recovery, not an automatic-paste pass. Run the <a href="app-compatibility.html">privacy-safe target-app check</a> to separate automatic paste from clipboard recovery; it records outcomes, never your words.</p>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div class="wrap">
-          <span class="section-eyebrow">New in macOS 0.3</span>
-          <h2>Say exactly what should happen</h2>
+          <span class="section-eyebrow">Built for one thing</span>
+          <h2>Fast, deterministic, and local</h2>
           <div class="grid">
             <article class="card">
-              <h3>Voice shortcuts</h3>
-              <p>Map a phrase you say to exact reusable text. No rewriting model, no cloud call, and no ambiguity about the result.</p>
+              <h3>Hold or press to toggle</h3>
+              <p>Use Right Option on Mac or Right Alt on Windows, pick another hotkey in Settings, or switch to Press to toggle. Press Escape at any time to cancel a recording without touching your clipboard.</p>
+            </article>
+            <article class="card" id="delivery-boundary">
+              <h3>Safe paste and recovery</h3>
+              <p>Presspeech checks that the original window is still focused before automatic paste. If focus changed or cannot be verified, it skips auto-paste and keeps the transcript available for manual recovery. Keep the starting field and tab selected until delivery finishes.</p>
+            </article>
+            <article class="card">
+              <h3>Voice shortcuts and corrections</h3>
+              <p>Map spoken phrases to exact reusable text and local dictionary rules. Output stays deterministic with no generative rewriting model and no cloud call.</p>
             </article>
             <article class="card">
               <h3>Spoken formatting</h3>
-              <p>Opt in to deterministic English commands including “new paragraph”, “bullet point”, “comma”, and “open quote”; selecting the French Language Hint switches formatting to canonical French phrases.</p>
+              <p>On macOS, opt in to deterministic English commands including “new paragraph”, “bullet point”, “comma”, and “open quote”. Selecting the French Language Hint switches formatting to French phrases.</p>
             </article>
             <article class="card">
-              <h3>Try Dictation</h3>
-              <p>Both apps include an in-app scratchpad for a first test. It may still use the system clipboard, so practice with harmless words. Use the <a href="getting-started.html">first-dictation guide</a> to decide whether to launch the current build before testing the hotkey.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div class="wrap">
-          <span class="section-eyebrow">macOS implementation</span>
-          <h2>Built for one thing, not ten</h2>
-          <div class="grid">
-            <article class="card">
-              <h3>Press and speak</h3>
-              <p>Presspeech is a menu-bar utility, not a document manager. The default trigger is Right Option, with other hotkeys available from the menu.</p>
+              <h3>Try Dictation scratchpad</h3>
+              <p>Both apps include a built-in scratchpad to check your microphone, hotkey, and speech model with harmless words before dictating into another app.</p>
             </article>
             <article class="card">
-              <h3>Local speech recognition</h3>
-              <p>Audio is captured in memory and transcribed locally. Presspeech checks the original window before automatic paste. A copied notice means the published build copied the transcript at completion for manual recovery; check that the clipboard still holds it before pasting. Other delivery errors do not guarantee a copy or an empty field. Audio is then discarded and transcripts are not written to disk.</p>
-            </article>
-            <article class="card">
-              <h3>Native macOS stack</h3>
-              <p>Swift, AVFoundation, CoreGraphics, AppKit, CoreML, and FluidAudio. No embedded browser runtime, interpreter, account, subscription, or cloud transcription endpoint.</p>
+              <h3>Native footprint</h3>
+              <p>Swift, AVFoundation, AppKit, CoreML, and FluidAudio on macOS, with a separate Python implementation on Windows. Audio stays in memory and is discarded after transcription, with no persistent transcript archive.</p>
             </article>
           </div>
         </div>
@@ -271,28 +258,28 @@
           <div class="grid two">
             <article class="card">
               <h3>Use Presspeech when you want</h3>
-              <p>Fast phrase-length dictation in everyday text fields, with a visible clipboard fallback when automatic delivery is unavailable; a local-only transcription model; and a workflow that does not keep a transcript library. The macOS app is released and notarised; the Windows app is available for people comfortable evaluating an unsigned prerelease.</p>
+              <p>Fast phrase-length dictation in everyday text fields with a visible fallback when automatic paste is unsafe, a local-only speech model with no account or cloud path, and a lightweight tool that does not build a transcript library. The macOS build is signed and notarised, and the Windows build is available as an unsigned prerelease.</p>
             </article>
             <article class="card">
               <h3>Use something else when you need</h3>
-              <p>Intel Mac or Windows on Arm support, macOS before 14 Sonoma, an installer accepted by managed Windows policies, batch file transcription, speaker labels, long-form transcript editing, cloud models, team features, or integrations with notes databases.</p>
+              <p>Intel Mac or Windows on Arm support, macOS older than 14 Sonoma, a code-signed Windows installer for managed policies, batch file or meeting transcription, speaker labels, AI rewriting, cloud models, or team sync. <a href="compare/">Compare Presspeech with other dictation apps</a>.</p>
             </article>
           </div>
         </div>
       </section>
 
-      <section>
+      <section class="band-tint">
         <div class="wrap">
           <span class="section-eyebrow">Why trust it</span>
-          <h2>Evidence and install paths</h2>
+          <h2>Evidence and open source</h2>
           <div class="facts">
-            <div class="fact"><strong>Benchmarked</strong><span>FluidAudio on the Apple Neural Engine is measured against the prior GPU path on the same WAV clips.</span></div>
-            <div class="fact"><strong>Auditable</strong><span>The macOS app is a single Swift source file; the separate Windows implementation is readable Python. Release scripts and packaging metadata are public.</span></div>
-            <div class="fact"><strong>Private by design</strong><span>The <a href="privacy.html#network-calls">version-specific network inventory</a> covers model downloads and bundled-library behavior, optional update checks, and user-triggered support and install links.</span></div>
-            <div class="fact"><strong>Delivery is testable</strong><span>The <a href="app-compatibility.html">eight-check target-app protocol</a> distinguishes automatic paste, safe clipboard recovery, and incorrect results without publishing anyone's words.</span></div>
-            <div class="fact"><strong>Agent-readable</strong><span>Install instructions, benchmark results, privacy facts, and comparison pages are available as plain HTML, Markdown, JSON, and text.</span></div>
+            <div class="fact"><strong>Benchmarked</strong><span>FluidAudio on the Apple Neural Engine is measured on public WAV clips against the prior GPU path. <a href="benchmarks.html">Read the benchmarks</a>.</span></div>
+            <div class="fact"><strong>Auditable</strong><span>The macOS app is a single Swift source file, and the separate Windows implementation is readable Python. Release scripts and packaging metadata are public.</span></div>
+            <div class="fact"><strong>Private by design</strong><span>No account, cloud transcription, or Presspeech analytics. Review every connection in the <a href="privacy.html#network-calls">version-specific network inventory</a>.</span></div>
+            <div class="fact"><strong>Delivery is testable</strong><span>The <a href="app-compatibility.html">eight-check target-app protocol</a> distinguishes automatic paste, safe clipboard recovery, and failures without sharing anyone's words.</span></div>
+            <div class="fact"><strong>Open source (MIT)</strong><span>Free to use, audit, build from source, and adapt under the MIT license.</span></div>
+            <div class="fact"><strong>Agent-readable</strong><span>Install instructions, benchmark results, privacy facts, and comparisons are published as plain HTML, Markdown, JSON, and text.</span></div>
           </div>
-          <div class="note warn"><p><strong>Feedback availability checked 24 September 2026:</strong> <a href="https://github.com/rcourtman/presspeech/issues">GitHub currently restricts new issues</a>. The target-app worksheet can save aggregate results as a local, unmonitored draft; downloading it does not submit a report. Test for your own decision, then check the <a href="https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md">current support route</a> before sharing counts. If no comparable open thread accepts comments, keep the draft private until a suitable route reopens.</p></div>
           <div class="actions">
             <a class="button secondary" href="app-compatibility.html">Test one target app</a>
             <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22">Browse compatibility reports</a>

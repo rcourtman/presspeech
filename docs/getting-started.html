@@ -45,102 +45,75 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">First dictation</span>
         <h1>From download to your first words</h1>
-        <p>Choose your platform, finish setup, and try an in-app dictation with harmless words before using Presspeech in another app. Speech is transcribed on-device; model downloads use the network. The in-app scratchpad is not isolated from the system clipboard.</p>
-        <div class="note warn" id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">
-          <h2 id="launch-decision-heading">Decide before opening a current build</h2>
-          <p class="decision-lead"><strong>Downloading is not launching:</strong> macOS 0.3.8 and Windows 0.1.12 start a missing-model request when Presspeech opens, not when you download the ZIP or installer. Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch; macOS 0.3.9 and later ask before a clean install’s first download. <strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong></p>
-          <p><strong>Safe stopping point:</strong> You can download a build and leave it unopened; installing without opening it also does not start the request. If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option. It starts checked by default; confirm it is clear before choosing <strong>Finish</strong>. Before choosing to open it, read the <a href="#macos-launch-decision">macOS decision</a> or <a href="#windows-launch-decision">Windows decision</a>.</p>
-          <p><strong>Waiting with an existing install?</strong> Quit any running copy. Without opening Presspeech again, turn off its entry, if enabled, in <a href="https://support.apple.com/guide/mac-help/mh15189/mac">macOS System Settings → General → Login Items &amp; Extensions</a> or <a href="https://support.microsoft.com/en-gb/windows/experience/startup-boot/configure-startup-applications-in-windows">Windows Settings → Apps → Startup</a>. On Mac, also deselect <a href="https://support.apple.com/en-ie/102318">Reopen windows when logging back in</a> at sign-out or restart. Check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases in a browser</a> rather than opening the old app to look for updates; follow the new build's instructions before launching it. These steps cannot undo a model request already started.</p>
-          <ul role="list">
-            <li id="macos-launch-decision">
-              <h3>macOS 0.3.8 — wait if a token may be inherited</h3>
-              <p><strong>Choose macOS 0.3.9 after reviewing its launch decision</strong> if a Hugging Face token may be inherited by Presspeech, or you are unsure. Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear.</p>
-              <p><strong>Download on launch:</strong> a missing model is about 500–600 MB. A model request can include the inherited token; the bundled client honors lowercase <code>https_proxy</code>, and a TLS-inspecting proxy trusted by macOS can read that token.</p>
-              <p><strong>Proxy URL risk:</strong> 0.3.8 can log a malformed inherited <code>https_proxy</code> or <code>http_proxy</code> URL verbatim, including credentials in that URL, then ignore the proxy. If you depend on one and are unsure its URL is valid, leave 0.3.8 unopened. From 0.3.9, Presspeech refuses malformed proxy settings before model loading; it still honors valid proxies.</p>
-              <p>Read the <a href="install.html#model-download-privacy">full macOS warning</a> before deciding to launch.</p>
-            </li>
-            <li id="windows-launch-decision">
-              <h3>Windows 0.1.12 — wait if privacy risks are unclear</h3>
-              <p><strong>Choose 0.1.13 or later</strong> if you want to avoid possible Hugging Face usage telemetry, an available token or custom download route may be configured, or you are unsure. If you install but wait, leave <strong>Launch Presspeech</strong> unchecked.</p>
-              <p><strong>Download size and language:</strong> on a fresh PC with usable NVIDIA CUDA, the missing default model is about 2.5 GB and multilingual; without usable CUDA, the CPU default is about 141 MiB and English-only. <a href="windows.html#language-support">Check language support before downloading</a>.</p>
-              <p><strong>Routing risk:</strong> A custom route can change where the request and token go; a TLS-inspecting proxy trusted by the client can read the token. If such a proxy's trust is unclear, do not launch while it is in use.</p>
-              <p>Published 0.1.12 also briefly opens the selected microphone for an automatic local readiness check in first-run Setup; samples are discarded, not saved or sent. If you do not want that check, leave 0.1.12 unopened. 0.1.13 and later waits for an explicit <strong>Check Microphone</strong> choice.</p>
-              <p>Read the <a href="windows.html#model-download-privacy">full Windows warning</a> before deciding to launch. The Windows 0.1.13 disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings.</p>
-            </li>
-          </ul>
-          <p>The public models need no account token, and model requests do not include dictation audio or transcripts. Do not inspect or share token values. <strong>Verify published download availability</strong> in <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a> before following a newer guide. Source can be ahead of downloads. If you choose to launch now, read your platform's full warning and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
-        </div>
+        <p>Install your platform build, finish Setup, and run a quick in-app test with harmless words before dictating into another app. Speech recognition runs on your device, while the initial speech-model download uses the network.</p>
         <div class="actions">
           <a class="button" href="install.html">Install on macOS</a>
           <a class="button secondary" href="windows.html">Review the Windows install guide</a>
           <a class="button secondary" href="#quick-path">Already installed? Pick your next step</a>
         </div>
+        <div class="note" id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">
+          <h2 id="launch-decision-heading">Before the first model download</h2>
+          <p>Downloading the archive or installer makes no model request. On clean installs of current macOS 0.3.12 and Windows 0.1.14, Setup asks before downloading missing speech models and offers <strong>Set Up Later</strong>. Public model requests carry no inherited Hugging Face account token or bundled Hub telemetry, though configured proxy and CA settings still apply. Review your platform's <a href="install.html#model-download-privacy">macOS</a> or <a href="windows.html#model-download-privacy">Windows</a> model-download note and the <a href="privacy.html#network-calls">network-call inventory</a> before downloading.</p>
+        </div>
+        <details class="disclosure">
+          <summary>Using an older build (macOS 0.3.8 or Windows 0.1.12)?</summary>
+          <p id="macos-launch-decision"><strong>macOS 0.3.8:</strong> Started missing-model downloads on launch without Setup deferral, could attach an inherited Hugging Face token, and could log malformed proxy URLs. Upgrade to 0.3.9 or later and review <a href="privacy.html#macos-0-3-8-after-use">macOS 0.3.8 follow-up guidance</a>.</p>
+          <p id="windows-launch-decision"><strong>Windows 0.1.12:</strong> Started missing-model downloads automatically, ran an automatic microphone check in Setup, and left bundled Hub telemetry and implicit authentication enabled. Upgrade to 0.1.13 or later and review <a href="windows.html#windows-0-1-12-after-use">Windows 0.1.12 follow-up guidance</a>.</p>
+        </details>
       </div>
 
-      <section id="quick-path">
+      <section class="band-tint" id="quick-path">
         <div class="wrap">
           <span class="section-eyebrow">Your next step</span>
-          <h2>Start from the first state that describes you</h2>
-          <p>These steps describe the <strong>macOS 0.3.8 and 0.3.9 releases</strong> and <strong>Windows 0.1.12 prerelease</strong>, not features planned for later downloads.</p>
+          <h2>Start from where you are</h2>
+          <p>These checkpoints describe current <strong>macOS 0.3.12</strong> and <strong>Windows 0.1.14</strong> builds.</p>
           <ol class="checkpoints" role="list">
             <li>
-              <strong>I need to install</strong>
-              <span>Read the launch decision above, then choose the <a href="install.html">macOS release</a> or <a href="windows.html">Windows prerelease guide</a>. Downloading alone does not start a model request.</span>
+              <strong>Need to install</strong>
+              <span>Choose the <a href="install.html">macOS release</a> or <a href="windows.html">Windows prerelease guide</a>. Downloading alone starts no model request.</span>
             </li>
             <li>
               <strong>Installed, not Ready</strong>
-              <span>If you chose to wait, do not launch it. Otherwise <a href="#finish-setup">finish setup</a> and wait for the local model to report Ready before testing the hotkey.</span>
+              <span><a href="#finish-setup">Finish Setup</a> and let the local speech model reach Ready before testing the hotkey.</span>
             </li>
             <li>
               <strong>Ready, not tested</strong>
-              <span><a href="#private-test">Use Try Dictation</a> with harmless words. The scratchpad may use the clipboard; continue when the complete sentence appears.</span>
+              <span><a href="#private-test">Use Try Dictation</a> with harmless words and confirm the complete sentence appears.</span>
             </li>
             <li>
               <strong>In-app test passed</strong>
-              <span><a href="#first-app">Try a blank TextEdit or Notepad field</a>. Count automatic paste only if complete text appears once with no recovery notice. A copied notice is manual recovery, not an automatic-paste pass; <a href="#first-app-result">classify the result</a> before pasting or retrying.</span>
+              <span><a href="#first-app">Try a blank TextEdit or Notepad field</a>. Count automatic paste only when complete text lands once with no recovery notice.</span>
             </li>
           </ol>
-          <p class="quiet">If a step fails, stop there. Use its guidance below or match the visible status to the <a href="troubleshooting.html">recovery guide</a>.</p>
+          <p class="quiet">If a step fails, stop there and match the status message in the <a href="troubleshooting.html">troubleshooting guide</a>.</p>
         </div>
       </section>
 
       <section id="choose-platform">
         <div class="wrap">
           <span class="section-eyebrow">Need to install?</span>
-          <h2>Check the computer, then use its install guide</h2>
+          <h2>Check your computer, then install</h2>
           <div class="grid two">
-            <article class="card" id="macos">
+            <article class="card platform-card" id="macos">
               <h3>macOS 0.3.12</h3>
-              <p>Requires Apple Silicon and macOS 14 or later. The release is notarised. On an existing installation, a missing 500–600 MB local model starts downloading on launch; a clean install asks first, and a valid cached model loads without another download. Speech recognition runs on your Mac.</p>
-              <p class="quiet"><strong>Already used macOS 0.3.8?</strong> Read the <a href="privacy.html#macos-0-3-8-after-use">follow-up guidance before another model download</a>.</p>
-              <p><a href="install.html">Install the macOS release</a></p>
+              <p>Requires Apple Silicon and macOS 14 or later. Signed and notarised. Clean installs ask before downloading the ~500-600 MB local model, and a valid cached model loads offline.</p>
+              <div class="platform-card__footer">
+                <a class="button" href="install.html">Install the macOS release</a>
+              </div>
             </article>
-            <article class="card" id="windows">
+            <article class="card platform-card" id="windows">
               <h3>Windows 0.1.14 prerelease</h3>
-              <ol class="steps">
-                <li>
-                  <strong>Check this PC</strong>
-                  <p>Requires x64; Windows 11 is recommended. Use Windows 10 only while your specific edition remains supported or is covered by Extended Security Updates; <a href="https://learn.microsoft.com/en-us/windows/release-health/release-information">general support ended on 14 October 2025</a>.</p>
-                </li>
-                <li>
-                  <strong>Check language and download size</strong>
-                  <p>Allow about 4.4 GB for the app plus a first model download: usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB); without usable CUDA, the CPU default is English-only Whisper base.en (~141 MiB). Windows 0.1.13 and later asks before downloading missing first-run files. Choose the offered download or Set Up Later; a complete cached model loads without another request. See the <a href="windows.html#language-support">full language and model guide</a>.</p>
-                </li>
-                <li>
-                  <strong>Verify before running</strong>
-                  <p>The installer is unsigned. Follow the <a href="windows.html#download-verify-run">SHA-256 verification steps</a>. After checking the source and hash, you may choose <strong>More info → Run anyway</strong> for a SmartScreen warning. If Smart App Control or managed policy blocks it, stop—do not try to circumvent the block.</p>
-                </li>
-              </ol>
-              <p class="quiet"><strong>Already used Windows 0.1.12?</strong> Read the <a href="windows.html#windows-0-1-12-after-use">token-safety guidance for a past model download</a>. Do not include token values in logs or support requests.</p>
-              <p><a href="windows.html#language-support">Check requirements and install the Windows prerelease</a></p>
+              <p>Requires 64-bit x64 Windows 11 (recommended) or a supported Windows 10 edition with Extended Security Updates (<a href="https://learn.microsoft.com/en-us/windows/release-health/release-information">general Windows 10 support ended 14 October 2025</a>). Allow ~4.4 GB for the app, plus ~2.5 GB for multilingual Parakeet on NVIDIA CUDA or ~141 MiB for English-only Whisper base.en on CPU. Unsigned installer: verify SHA-256 first, and do not try to circumvent Smart App Control or managed policy.</p>
+              <div class="platform-card__footer">
+                <a class="button secondary" href="windows.html#download-verify-run">Verify and install on Windows</a>
+              </div>
             </article>
           </div>
-          <p class="quiet">Already installed? After checking the <a href="#model-download-preflight">first-launch decision</a>, <a href="#finish-setup">continue to finish setup</a>.</p>
-          <div class="note"><p><strong>Not supported:</strong> Intel Macs and Windows on Arm. For Windows 10, follow the support qualification above; see the <a href="windows.html">Windows install guide</a> before downloading.</p></div>
+          <div class="note"><p><strong>Not supported:</strong> Intel Macs and Windows on Arm.</p></div>
         </div>
       </section>
 
-      <section id="finish-setup">
+      <section class="band-tint" id="finish-setup">
         <div class="wrap">
           <span class="section-eyebrow">After launch</span>
           <h2>Finish setup before trying the hotkey</h2>
@@ -150,25 +123,24 @@
               <ol class="steps">
                 <li>
                   <strong>Prepare the speech model</strong>
-                  <p>A missing model begins downloading when you launch 0.3.8; in 0.3.9 and later, a clean install waits until you choose <strong>Download Model</strong>. Keep Presspeech open while it prepares, and reopen Setup Checklist from the menu-bar item if needed. Continue when the model reports Ready.</p>
+                  <p>On a clean install, choose <strong>Download Model</strong> in Setup (or <strong>Set Up Later</strong> to defer). Wait until the model reports Ready.</p>
                 </li>
                 <li>
                   <strong>Grant the three permissions</strong>
-                  <p>Use its buttons for Microphone, Accessibility (called <strong>Device Control and Data Access</strong> on macOS 27 and later), and Input Monitoring. Accessibility is a broad system-control grant: Apple advises granting it only to apps you trust. Presspeech uses it to check the focused destination and send the paste shortcut; without it, the normal verified paste path is unavailable.</p>
-                  <p><strong>Before granting Input Monitoring:</strong> macOS's grant can expose typed keys across apps. Presspeech uses keyboard events to detect the configured hotkey and Escape to cancel recording; it passes other keys through without saving, logging, or sending their values. Read <a href="https://support.apple.com/guide/mac-help/mchl4cedafb6/mac">Apple's Input Monitoring guidance</a> and <a href="install.html#permissions">the full permission scope</a> before deciding.</p>
+                  <p>Approve Microphone, Accessibility (<strong>Device Control and Data Access</strong> on macOS 27 and later), and Input Monitoring. Accessibility is a broad system grant used to verify the focused window and paste. Input Monitoring can expose typed keys across apps, though Presspeech requests keyboard events only for the configured hotkey and Escape and passes other keys through without saving, logging, or sending them. See <a href="https://support.apple.com/guide/mac-help/mchl4cedafb6/mac">Apple's Input Monitoring guidance</a> and <a href="install.html#permissions">the permission table</a>.</p>
                 </li>
                 <li>
                   <strong>Confirm the hotkey</strong>
-                  <p>Hold and release the displayed key. The default is <strong>Right Option</strong>. If it does not respond or controls another feature, choose a different key in Settings. You can open <strong>Try Dictation</strong> once Presspeech is Ready, before this test succeeds, and use the menu's <strong>Start Dictation</strong> and <strong>Stop and Transcribe</strong> controls. The checklist says <strong>Done</strong> only after a real hotkey event.</p>
+                  <p>Hold and release <strong>Right Option</strong> (or choose another key in Settings). Setup marks this Done after a real hotkey event.</p>
                 </li>
               </ol>
             </article>
             <article class="card">
               <h3>On Windows 0.1.14</h3>
               <ol class="steps">
-                <li><strong>Prepare the model or defer</strong><p>Choose the offered download or Set Up Later; a complete cached model loads without another request. Wait for Ready before testing dictation.</p></li>
-                <li><strong>Check the microphone explicitly</strong><p>Choose <strong>Check Microphone</strong> to open the selected input briefly for a local level check. Changing the selection alone does not start capture. Samples are discarded, not saved, sent or transcribed. Speak during the check; select or unmute the correct input and retry if no level appears.</p></li>
-                <li><strong>Choose the style, hotkey and startup</strong><p>Choose Hold to talk or <strong>Press to toggle</strong> in Setup. Right Alt is the default; choose F8 or another key if it acts as AltGr. <strong>Start Presspeech with Windows</strong> is off for a new profile; existing saved choices are retained. Review startup before choosing Finish Setup or Set Up Later. Try Dictation needs a ready model; Finish Setup also requires the global listener. Microphone readiness is advisory. See the <a href="windows.html#first-launch">first-launch steps</a>.</p></li>
+                <li><strong>Prepare the model or defer</strong><p>Choose the offered download or <strong>Set Up Later</strong>. A complete cached model loads without a network request. Wait for Ready before testing dictation.</p></li>
+                <li><strong>Check the microphone explicitly</strong><p>Choose <strong>Check Microphone</strong> for a brief local level check. Changing the selected input alone does not start capture, and samples are discarded in memory.</p></li>
+                <li><strong>Choose style, hotkey, and startup</strong><p>Choose Hold to talk or <strong>Press to toggle</strong> in Setup. Right Alt is the default, or pick F8 if it acts as AltGr. <strong>Start Presspeech with Windows</strong> is off for new profiles, while saved choices are kept. See the <a href="windows.html#first-launch">Windows first-launch steps</a>.</p></li>
               </ol>
             </article>
           </div>
@@ -178,79 +150,68 @@
       <section id="private-test">
         <div class="wrap">
           <span class="section-eyebrow">Safe practice</span>
-          <h2>Try the first dictation in Presspeech</h2>
-          <p>Use a harmless practice sentence in the built-in scratchpad to check the complete flow without sending text into another app.</p>
-          <div class="note warn" id="scratchpad-clipboard-boundary"><p><strong>Before you practice:</strong> the scratchpad is an in-app destination, not a guarantee that the system clipboard is untouched. macOS 0.3.8 can put dictated text on the clipboard during delivery; Windows 0.1.12 can copy it for recovery if focus changes. Manually copying scratchpad text also uses the clipboard. With Handoff enabled, macOS Universal Clipboard may make copied text available on nearby Apple devices; Windows Clipboard History or sync and third-party clipboard managers may retain it. Use only non-sensitive test words, then review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a> before dictating anything sensitive.</p></div>
+          <h2>Try your first dictation in Presspeech</h2>
+          <p>Speak a harmless practice sentence in the built-in scratchpad to confirm local transcription before dictating into another app.</p>
+          <div class="note" id="scratchpad-clipboard-boundary"><p><strong>Clipboard note:</strong> The scratchpad is an in-app test field, not an isolation boundary from the system clipboard. Manual copies and normal delivery still use the OS clipboard, where macOS Universal Clipboard, Windows Clipboard History, or third-party clipboard managers may observe copied text. Practice with non-sensitive test words and review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a> before sensitive dictation.</p></div>
           <ol class="steps">
             <li>
               <strong>Open Try Dictation</strong>
-              <p>On macOS, choose <strong>Support → Try Dictation…</strong>. On Windows, choose <strong>Try Dictation…</strong> from setup or the notification-area menu.</p>
+              <p>On macOS, choose <strong>Support → Try Dictation…</strong>. On Windows, choose <strong>Try Dictation…</strong> from Setup or the tray menu.</p>
             </li>
             <li>
-              <strong>Put the cursor in its text area</strong>
-              <p>Leave that field focused so Presspeech can verify the delivery path.</p>
+              <strong>Click the text area</strong>
+              <p>Keep the scratchpad focused so Presspeech can verify the target.</p>
             </li>
             <li>
-              <strong>Choose how to start and stop</strong>
-              <p>Hold the displayed key, say a short sentence, then release. Or choose <strong>Press to toggle</strong>—under <strong>Settings → Dictation → Trigger</strong> on macOS, or in Windows Settings—to press once to start and again to stop. On macOS you can also choose <strong>Start Dictation</strong> and <strong>Stop and Transcribe</strong> from the menu. Continue when your sentence appears. Audio is discarded after local processing; the scratchpad is not a saved history.</p>
+              <strong>Start, speak, and stop</strong>
+              <p>Hold the configured key, speak a short sentence, and release, or switch to <strong>Press to toggle</strong> in Settings to tap once to start and again to stop. Audio is discarded after local processing.</p>
             </li>
           </ol>
-          <div class="note"><p><strong>No recording cue?</strong> Recheck the hotkey and microphone in Setup Checklist on macOS or Settings on Windows. Do not retry while the model is still preparing.</p></div>
         </div>
       </section>
 
-      <section id="first-app">
+      <section class="band-tint" id="first-app">
         <div class="wrap">
           <span class="section-eyebrow">Ready to use</span>
           <h2>Dictate into a familiar text field</h2>
-          <p>Open a blank TextEdit document on macOS or Notepad on Windows, click in it, and repeat hold–speak–release without changing windows. Keep that field selected until dictation finishes; a window-level check does not reliably establish the identity of a field or browser tab. Press <strong>Escape</strong> to cancel an active recording.</p>
-          <p>In every new target app, start with a blank, disposable field that cannot submit or execute text. Dictate harmless words once. Count automatic paste as working only if the complete text appears exactly once in the intended field without a recovery notice. A successful scratchpad or TextEdit/Notepad test does not establish automatic-paste support in another app. Use the result guide below before pasting or recording again.</p>
+          <p>Open a blank TextEdit document on macOS or Notepad on Windows, click inside, and dictate a harmless sentence without switching windows or tabs. Press <strong>Escape</strong> to cancel an active recording. In every new target app, start with a disposable field that cannot submit or execute text.</p>
           <div class="grid" id="first-app-result">
             <article class="card">
-              <h3>Practice sentence once, no notice</h3>
-              <p>If the complete sentence appears in the intended field, this is an automatic-paste smoke pass for this field only. Test another app separately before relying on it.</p>
+              <h3>Complete sentence once, no notice</h3>
+              <p>Automatic paste worked for this field. Test other apps separately before relying on them.</p>
             </article>
             <article class="card">
-              <h3>No text, copied notice</h3>
-              <p>This is manual recovery, not automatic paste. Check the field first. Before pasting, <a href="#copied-notice-recovery">verify the current clipboard only if safe</a>; a later copy may have replaced the transcript.</p>
+              <h3>No text, recovery notice</h3>
+              <p>Presspeech skipped auto-paste and kept the text for manual recovery. Inspect the field first and follow the <a href="#copied-notice-recovery">recovery steps below</a>.</p>
             </article>
             <article class="card">
-              <h3>Partial, duplicate, wrong, or uncertain</h3>
-              <p>Stop and inspect the disposable field before trying again. A delivery error does not prove the field is empty or that the clipboard holds the transcript. Follow the <a href="troubleshooting.html#macos-paste">macOS</a> or <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps.</p>
+              <h3>Partial, duplicate, or uncertain</h3>
+              <p>Stop and inspect the disposable field before retrying. Follow the <a href="troubleshooting.html#macos-paste">macOS</a> or <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps.</p>
             </article>
           </div>
-          <div class="note warn"><p><strong>Keep the original field and browser tab selected until Presspeech finishes.</strong> A switch within the same window may paste into the newly focused place without a copied/manual-paste notice. If you changed focus, inspect the destination before retrying; use only disposable fields for a target-app test.</p></div>
           <div class="note" id="copied-notice-recovery">
-            <p><strong>If Presspeech did not paste:</strong> check the intended field first; text may already be there. A macOS 0.3.8 copied notice or Windows 0.1.12's <strong>Transcript copied, not pasted</strong> means the finished transcript was copied at completion, not that the clipboard still holds it for manual paste. A later copy can replace it without changing the notice. Other delivery-error notices do not guarantee that the clipboard holds the transcript or that the field is empty; do not paste or dictate again blindly. Match the notice to the <a href="troubleshooting.html#macos-paste">macOS</a> or <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps.</p>
-            <p>If unsure and it is safe to inspect the current clipboard item, paste into a blank, disposable field in a local, non-syncing, non-executing text editor you trust—not a web form, chat, or command shell. Paste into your intended field only if it still holds the complete transcript; do not dictate the same text again before checking. If the clipboard may hold sensitive unrelated content, do not paste it just to check. On macOS, if the clipboard changed, use <strong>Copy Last Transcript</strong> when Recent Transcripts is enabled. Otherwise, do not paste the newer clipboard item as your dictation.</p>
-            <p>This is recovery, not a successful automatic paste. It can happen in some Electron/Chromium apps on macOS 0.3.8 even when the window appears unchanged. On Windows, reopen an administrator-level target normally rather than elevating Presspeech.</p>
+            <p><strong>Manual recovery steps:</strong> Check the intended field first in case text already arrived. On macOS, a copied notice means the transcript was copied at completion, though a later copy can replace it. If the clipboard changed and Recent Transcripts is enabled, use <strong>Copy Last Transcript</strong>. On Windows 0.1.13 and later, use the explicit Copy, Discard, or Leave Waiting actions in <strong>Delivery Recovery</strong>, and reopen elevated apps normally rather than elevating Presspeech.</p>
           </div>
-          <div class="note warn"><p><strong>If macOS 0.3.8 reports “Couldn't paste”:</strong> inspect the field before retrying. An input error does not prove nothing arrived; text may be partial or duplicated. If text is missing or incomplete, remove any partial text before using <strong>Copy Last Transcript</strong> when offered to paste the complete transcript deliberately. If no recovery copy is available, correct or remove partial text before another recording. Do not use that target for important text until you have checked repeatable delivery with harmless phrases. See the <a href="troubleshooting.html#macos-paste">paste recovery guide</a>.</p></div>
-          <div class="note warn"><p><strong>Command shells can run pasted text.</strong> <strong>Append newline</strong>, Windows <strong>newline</strong>, or spoken formatting can submit text. Dictate commands into Try Dictation or a text editor, review the exact text, then paste and run deliberately. See <a href="https://support.apple.com/en-gb/127377">Apple</a> and <a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings">Windows</a> terminal guidance.</p></div>
-          <p>One disposable-field try is a smoke check, not proof of repeatable delivery. Before relying on a browser editor, Electron app, terminal, or remote session, use the <a href="app-compatibility.html">eight-attempt privacy-safe target-app check</a>. It separates automatic paste from manual recovery without publishing your words.</p>
+          <div class="note warn"><p><strong>Command shells can run pasted text.</strong> macOS <strong>Append newline</strong>, Windows <strong>newline</strong>, or spoken formatting can submit a command immediately. Dictate shell commands into Try Dictation or a plain-text editor, review the exact text, and paste deliberately. See <a href="https://support.apple.com/en-gb/127377">Apple</a> and <a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings">Windows</a> terminal guidance.</p></div>
+          <p>Before relying on a browser editor, Electron app, terminal, or remote session, run the <a href="app-compatibility.html">eight-check privacy-safe target-app protocol</a> to separate automatic paste from manual recovery without sharing your words.</p>
         </div>
       </section>
 
       <section id="recovery">
         <div class="wrap">
           <span class="section-eyebrow">If you get stuck</span>
-          <h2>Reopen the controls</h2>
+          <h2>Reopen controls and get help</h2>
           <div class="grid two">
             <article class="card">
-              <h3>macOS item is hidden</h3>
-              <p>If you hid the item in <strong>Settings → Behavior → Show Presspeech in Menu Bar</strong>, right-click the Dock icon and choose <strong>Show Presspeech in Menu Bar</strong>. Hiding the item enables Dock access if needed. If a crowded or notched menu bar temporarily omits it, open <strong>Presspeech.app</strong> again from Applications, Finder, or Spotlight; the running app opens Setup Checklist instead of starting another copy. Enable <strong>Show in Dock</strong> there if you need a persistent alternative.</p>
+              <h3>macOS menu-bar item is hidden</h3>
+              <p>Right-click the Dock icon and choose <strong>Show Presspeech in Menu Bar</strong>, or open <strong>Presspeech.app</strong> again from Applications, Finder, or Spotlight to show Setup Checklist and enable <strong>Show in Dock</strong>.</p>
             </article>
             <article class="card">
-              <h3>Windows icon is hidden</h3>
-              <p>Check the notification-area overflow first. You can also launch Presspeech again from the Start Menu to restore its window or controls without starting a second dictation process.</p>
+              <h3>Windows tray icon is hidden</h3>
+              <p>Check the notification-area overflow, or launch Presspeech again from the Start Menu to bring its controls forward without starting a second dictation process.</p>
             </article>
           </div>
-          <p>For model, permission, audio, or hotkey recovery, use the <a href="troubleshooting.html">troubleshooting guide</a>. If the problem remains, <strong>Copy Diagnostics</strong> copies a privacy-safe summary but does not send it; review it and keep it private until there is a usable report route. Never post dictated text, audio, references, or dictionary contents to a public issue.</p>
-          <div class="note warn"><p><strong>Public issue creation is restricted (checked 23 September 2026).</strong> The in-app <strong>Report a Problem</strong> and <strong>Suggest an Improvement</strong> actions open the <a href="https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md">support guide</a>; they do not submit anything. <strong>Copy Diagnostics</strong> copies a summary locally and does not send it. GitHub currently blocks creating new issues, so do not expect a new report form to accept a submission. Check <a href="https://github.com/rcourtman/presspeech/issues">existing issues</a> for a relevant thread and whether comments are available. If there is no usable route, keep your report draft private and retry later; do not post private data elsewhere as a workaround. For a security concern, follow the <a href="https://github.com/rcourtman/presspeech/blob/main/SECURITY.md">private reporting instructions</a>.</p></div>
-          <details>
-            <summary>What to save in a private report draft</summary>
-            <p>Keep only details useful for reproduction; this draft is not sent or monitored. Record the Presspeech and operating-system versions, affected stage, expected and observed result, smallest safe reproduction steps or frequency, generic target-app context if relevant, recovery tried and whether it worked, and attempt/failure counts. For text delivery, use harmless test text and record only whether complete text was recovered—never save or share the phrase itself. Keep diagnostics private until reviewed; do not include audio, transcripts, raw logs, credentials, private paths, or identifying names.</p>
-          </details>
+          <p>For model, permission, audio, or hotkey issues, check the <a href="troubleshooting.html">troubleshooting guide</a>. <strong>Copy Diagnostics</strong> copies a privacy-safe summary locally without sending it. For reporting steps, see the <a href="https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md">support guide</a>, and use the <a href="https://github.com/rcourtman/presspeech/blob/main/SECURITY.md">private security reporting route</a> for vulnerabilities. Never share dictated text, audio, dictionary contents, or credentials in a public issue.</p>
         </div>
       </section>
     </main>
