@@ -69,7 +69,7 @@
                 <tr>
                   <th scope="row">Engine path</th>
                   <td>Local Parakeet TDT v3 CoreML model, or opt-in Parakeet Ultra from 0.3.10, on the Apple Neural Engine via FluidAudio.</td>
-                  <td>Your choice of local models, including Parakeet (Parakeet Ultra was added in v2.21) via FluidAudio, Whisper via whisper.cpp, SenseVoice, Apple Speech, and others in its current catalog, or hosted models through your own API key.</td>
+                  <td>Your choice of local models, including Parakeet (including Parakeet Ultra) via FluidAudio, Nemotron, Whisper via whisper.cpp, Cohere, SenseVoice, Apple Speech, and others in its current catalog, or hosted models through your own API key.</td>
                 </tr>
                 <tr>
                   <th scope="row">Privacy posture</th>
@@ -83,8 +83,8 @@
                 </tr>
                 <tr>
                   <th scope="row">Footprint</th>
-                  <td>9.2 MB release zip; no documented idle-resource measurement; <a href="../benchmarks.html">published latency benchmark</a>.</td>
-                  <td>48.7 MB v2.21 DMG; resource figures not published, 8 GB RAM recommended.</td>
+                  <td>9.3 MB release zip; no documented idle-resource measurement; <a href="../benchmarks.html">published latency benchmark</a>.</td>
+                  <td>37.5 MB v2.27 DMG; general resource figures not published (optional local VoiceInk Refine requires Apple Silicon and at least 16 GB of memory).</td>
                 </tr>
                 <tr>
                   <th scope="row">Configurability</th>
@@ -94,7 +94,7 @@
                 <tr>
                   <th scope="row">Platforms</th>
                   <td>Apple Silicon Macs on macOS 14+; a separate Windows preview is available.</td>
-                  <td>The prebuilt Mac app requires Apple Silicon; v2.21's README raises the minimum to macOS 15.0 (its site still lists 14.4+). A separate iPhone/iPad companion is in beta.</td>
+                  <td>macOS 15.0+; Apple Silicon is recommended for local models (VoiceInk recommends cloud transcription on Intel Macs), and Apple Speech requires macOS 26+. A separate iPhone/iPad companion app (iOS/iPadOS 17+) is sold on the App Store.</td>
                 </tr>
               </tbody>
             </table>
@@ -102,7 +102,7 @@
           <div class="note">
             <p>Choose VoiceInk if you want one configurable tool that also handles AI cleanup, per-app behavior, saved history, and file transcription, and a one-time price fits. Choose Presspeech if you want a smaller, focused utility without cloud transcription or persistent transcript history, or need macOS 14 support. Both Mac apps can run Parakeet, so the larger difference is product surface and data-flow choice.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; VoiceInk's <a href="https://tryvoiceink.com/docs/introduction">workflow guide</a>, <a href="https://tryvoiceink.com/docs/ai-models">model catalog</a>, <a href="https://tryvoiceink.com/docs/transcription-history">history documentation</a>, and <a href="https://tryvoiceink.com/privacy">privacy policy</a> (checked 30 October 2026); and the <a href="https://tryvoiceink.com/">VoiceInk official site</a>, <a href="https://tryvoiceink.com/ios">iOS beta</a>, <a href="https://github.com/Beingpax/VoiceInk/blob/v2.21/README.md">v2.21 README</a>, <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.21">v2.21 release</a>, and <a href="https://github.com/Beingpax/VoiceInk/releases/expanded_assets/v2.21">release assets</a> (checked 22 October 2026).</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; VoiceInk's <a href="https://tryvoiceink.com/docs/introduction">workflow guide</a>, <a href="https://tryvoiceink.com/docs/installation">installation guide</a>, <a href="https://tryvoiceink.com/docs/ai-models">model catalog</a>, <a href="https://tryvoiceink.com/docs/local-models">local models guide</a>, <a href="https://tryvoiceink.com/docs/transcription-history">history documentation</a>, <a href="https://tryvoiceink.com/privacy">privacy policy</a>, <a href="https://tryvoiceink.com/">official site</a>, <a href="https://tryvoiceink.com/ios">iOS app</a>, <a href="https://github.com/Beingpax/VoiceInk/blob/v2.27/README.md">v2.27 README</a>, <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.27">v2.27 release</a>, and <a href="https://github.com/Beingpax/VoiceInk/releases/expanded_assets/v2.27">release assets</a> (checked 23 November 2026).</p>
         </div>
       </section>
     </main>

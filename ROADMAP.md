@@ -1,6 +1,6 @@
 # Presspeech product roadmap
 
-Last reviewed: 26 September 2026
+Last reviewed: 23 November 2026
 
 Presspeech is the small, private dictation tool: hold or toggle a key, speak,
 and put locally transcribed text into the app you were using. The roadmap
@@ -32,11 +32,13 @@ request status remains authoritative for individual changes.
 
 ## Now: qualify shipped text delivery
 
-macOS 0.3.9 is now published, following 0.3.8 on 22 September 2026. The
+macOS 0.3.11 and the Windows 0.1.13 prerelease are now published (both
+released 31 October 2026, following macOS 0.3.10 on 22 October, macOS 0.3.9 on
+26 September, and macOS 0.3.8 on 22 September 2026). The
 current priority is to qualify released text delivery in physical and
 target-app conditions that automated and packaged-app checks cannot simulate,
-not to add another layer of settings. As checked 26 September, issues #33 and
-#36 are closed, but their named rows in the
+not to add another layer of settings. As checked 23 November 2026, issues #33 and
+#36 remain closed, but their named rows in the
 [macOS release qualification](docs/manual-qa.md#macos-release-qualification)
 still have no recorded results. Issue closure and publication are not evidence
 that every target or input path passed; keep those native gates visible until
@@ -95,13 +97,14 @@ cannot, but only for each exact tested version and condition. Do not pool
 self-selected reports into a general success rate; community reports supplement
 rather than replace native release testing.
 
-There is currently an intake constraint: GitHub's [issue index](https://github.com/rcourtman/presspeech/issues)
-says new issue creation is restricted. Existing matching threads may still
-accept comments; otherwise, as described in [SUPPORT.md](SUPPORT.md), worksheet
-results remain local, unmonitored drafts. This limits observed passing evidence.
-Treat missing public reports as missing evidence—not evidence of
-low demand or reliable delivery—and keep direct native qualification in force
-until a usable reporting route returns.
+Public intake was previously restricted in September 2026; as rechecked on 23
+November 2026, GitHub's [issue index](https://github.com/rcourtman/presspeech/issues)
+has accepted recent non-collaborator issues (#92, #93, #95), though
+[SUPPORT.md](SUPPORT.md) has not yet been updated after a non-collaborator
+template qualification pass. Whenever issue creation is unavailable, worksheet
+results remain local, unmonitored drafts. Treat missing public passing reports
+as missing evidence—not evidence of low demand or reliable delivery—and keep
+direct native qualification in force.
 
 ### Product intelligence and community evidence (23–26 September 2026)
 
@@ -139,15 +142,15 @@ frames local/no-account dictation as a separate product, explicitly notes the
 initial model download, and separates optional provider-based cleanup; [dybur](https://dybur.com/)
 markets local Mac/Windows dictation as requiring little setup but still lists
 about 700 MB for its model. These are promotional claims, not comparative
-tests or user-demand data. As checked 26 September, the
+tests or user-demand data. As rechecked 23 November 2026, the
 [Presspeech release list](https://github.com/rcourtman/presspeech/releases)
-includes macOS 0.3.9 and Windows 0.1.12. The 0.3.9 release notes describe its
-inherited-token and malformed-proxy controls; the Windows 0.1.13 telemetry,
-token, and routing controls are not yet published. Keep exact-version
-first-launch guidance beside download choices. The standalone macOS 0.3.8 and
-Windows 0.1.12 release entries still omit their first-launch privacy decisions;
-the 0.3.9 entry includes one. An authorized release maintainer needs to correct
-the two older live entries. The bounded
+includes macOS 0.3.11 and Windows 0.1.13 (both published 31 October 2026). The
+macOS 0.3.9–0.3.11 and Windows 0.1.13 release notes describe their
+inherited-token, telemetry, and routing/proxy controls. Keep exact-version
+first-launch guidance beside download choices. The older standalone macOS 0.3.8
+and Windows 0.1.12 release entries still omit their first-launch privacy
+decisions; the later entries include them. An authorized release maintainer
+needs to correct the two older live entries. The bounded
 [release-entry draft](marketing/RELEASE_ENTRY_CORRECTIONS.md) is ready for
 review; editing source notes alone cannot do it. This is a publication gate,
 not a reason to add features or broader reassurance copy.
@@ -217,7 +220,7 @@ delivery, and recovery are consequential risks in this workflow, consistent
 with the reports in Presspeech issues #33 and #36. It also identifies a concrete
 recovery trade-off: making the transcript available without displacing unrelated
 clipboard content. Presspeech already offers configurable, bounded macOS
-transcript history in memory, cleared on quit; upcoming Windows delivery
+transcript history in memory, cleared on quit; published Windows 0.1.13 delivery
 recovery keeps failed text in process memory for an explicit user decision.
 Treat discoverability and reliability of these transient controls as evidence
 to qualify, not as a mandate for a new shortcut or persistent archive. Do not
@@ -446,9 +449,9 @@ To influence the roadmap when GitHub accepts new reports, search the
 a [bug report](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml)
 or [feature request](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml).
 Describe frequency, impact, the current workaround, and an observable success
-condition. As checked on 23 September 2026, issue creation is restricted; if
-no comparable open report accepts comments, keep privacy-safe observations
-locally and retry when intake returns. Do not route around the restriction by
-posting reports or private data elsewhere. For recognition and performance
-work, follow the privacy-safe evidence guidance in
+condition. Check [SUPPORT.md](SUPPORT.md) for current reporting availability;
+if issue creation is restricted and no comparable open report accepts comments,
+keep privacy-safe observations locally and retry when intake is available. Do
+not route around a restriction by posting reports or private data elsewhere. For
+recognition and performance work, follow the privacy-safe evidence guidance in
 [CONTRIBUTING.md](CONTRIBUTING.md).

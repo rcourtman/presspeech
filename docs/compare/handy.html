@@ -64,7 +64,7 @@
                 <tr>
                   <th scope="row">Primary workflow</th>
                   <td>Hold-to-talk or toggle, then normally paste after confirming the same window is still focused, with manual clipboard recovery when needed. On the published Mac benchmark, model transcription takes 92&ndash;152 ms p50 across the tested clips; clipboard and paste work are not timed.</td>
-                  <td>Hold-to-talk or toggle, then paste the transcript into the active text field.</td>
+                  <td>Hold-to-talk or toggle, then paste the transcript into the active text field; from v0.10.0, Handy can also transcribe audio files into History.</td>
                 </tr>
                 <tr>
                   <th scope="row">Platforms</th>
@@ -74,7 +74,7 @@
                 <tr>
                   <th scope="row">Speech engines</th>
                   <td>Per platform: multilingual Parakeet TDT v3 through FluidAudio/CoreML on macOS, with opt-in Parakeet Ultra (a post-trained v3) from 0.3.10; multilingual Parakeet TDT v3 on NVIDIA CUDA or English-only Whisper base.en by default on CPU-only Windows PCs.</td>
-                  <td>User-selectable local Whisper models and Parakeet models. Its documentation describes GPU acceleration for Whisper and CPU operation for Parakeet.</td>
+                  <td>User-selectable local Whisper models and Parakeet models, with automatic language detection across supported models as of v0.10.0. Its documentation describes GPU acceleration for Whisper and CPU operation for Parakeet.</td>
                 </tr>
                 <tr>
                   <th scope="row">Paste and clipboard recovery</th>
@@ -83,13 +83,13 @@
                 </tr>
                 <tr>
                   <th scope="row">Privacy posture</th>
-                  <td>No cloud transcription, Presspeech-authored analytics, account, or crash reporter. Speech-library network behavior varies by published platform build: Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads. See the <a href="../privacy.html#network-calls">version-specific network-call inventory</a>. Dictation audio is held in memory and discarded.</td>
+                  <td>No cloud transcription, Presspeech-authored analytics, account, or crash reporter. Speech-library network behavior varies by published platform build: Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads, while Windows 0.1.13 disables it and account-token authentication. See the <a href="../privacy.html#network-calls">version-specific network-call inventory</a>. Dictation audio is held in memory and discarded.</td>
                   <td>Core transcription happens on the computer without uploading audio. Handy's privacy policy says update checks are enabled by default and model downloads may fall back from Hugging Face to its Cloudflare-delivered model host; optional post-processing can call a configured local or cloud provider.</td>
                 </tr>
                 <tr>
                   <th scope="row">Text handling</th>
                   <td>Deterministic dictionary corrections, shortcuts, and filler removal on both platforms; macOS also has opt-in spoken formatting. No AI rewriting.</td>
-                  <td>Core local transcription plus model and language selection, a dictionary, filler-word removal, and optional post-processing controls.</td>
+                  <td>Core local transcription plus model and language selection, a dictionary, filler-word removal, optional post-processing controls, and a local transcription hook on macOS and Linux.</td>
                 </tr>
                 <tr>
                   <th scope="row">Transcript and audio retention</th>
@@ -98,7 +98,7 @@
                 </tr>
                 <tr>
                   <th scope="row">Implementation and scope</th>
-                  <td>Native Swift/AppKit macOS app with a separate Python Windows implementation. The macOS release zip is 9.2 MB before its model download.</td>
+                  <td>Native Swift/AppKit macOS app with a separate Python Windows implementation. The macOS release zip is 9.3 MB before its model download.</td>
                   <td>Extensible Tauri, React, and Rust application shared across platforms. Current release packages and models vary by operating system and architecture.</td>
                 </tr>
                 <tr>
@@ -112,7 +112,7 @@
           <div class="note">
             <p>Choose Handy if Linux or Intel Mac support, one cross-platform application, model switching, or a configurable local transcript and audio history matters most. Choose Presspeech if you want the smaller native macOS surface and its published model-transcription benchmark, or its deliberately narrow model choice and no persistent transcript archive. On Windows, test both on the actual hardware: their packaging and acceleration paths differ substantially.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, Handy's <a href="https://github.com/cjpais/Handy#linux-notes">Linux notes</a> and <a href="https://github.com/cjpais/Handy#previous-clipboard-content-is-pasted-instead-of-the-transcription">clipboard troubleshooting guidance</a> (checked 22 October 2026), its <a href="https://handy.computer/privacy">privacy policy</a> (effective 18 September 2026; checked 30 October 2026), and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.8">Handy v0.9.8 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.9.8">release assets</a> (checked 22 October 2026). These are the projects' published claims, not independent privacy or performance tests. No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, Handy's <a href="https://github.com/cjpais/Handy#linux-notes">Linux notes</a> and <a href="https://github.com/cjpais/Handy#previous-clipboard-content-is-pasted-instead-of-the-transcription">clipboard troubleshooting guidance</a>, its <a href="https://handy.computer/privacy">privacy policy</a> (effective 18 September 2026), and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.10.1">Handy v0.10.1 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.10.1">release assets</a> (checked 23 November 2026). These are the projects' published claims, not independent privacy or performance tests. No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
         </div>
       </section>
     </main>
