@@ -14,6 +14,55 @@ Also on the web: <https://rcourtman.github.io/presspeech/changelog.html>
 
 ## macOS
 
+<a id="macos-0.3.12"></a>
+
+### macOS 0.3.12 (2026-11-23)
+
+[GitHub release](https://github.com/rcourtman/presspeech/releases/tag/v0.3.12)
+
+The [full release notes](https://github.com/rcourtman/presspeech/releases/tag/v0.3.12) begin with a notice to read before opening this build.
+
+This update fixes toggle-mode auto-paste aborts with modifier hotkeys, upgrades
+the embedded FluidAudio speech runtime to 0.18.4, and fixes a minor CoreAudio
+device-property memory leak.
+
+#### Toggle-mode delivery
+
+- When stopping a recording in **Press to toggle** mode with a modifier hotkey
+  (such as Right Option), wait up to 500 ms for that hotkey’s own modifier key
+  to be released before running the physical-modifier paste guard (#93).
+- Any unrelated held modifier key or window-focus change still aborts automatic
+  paste immediately, and holding the stop modifier past the 500 ms bound
+  preserves manual clipboard recovery. Hold-to-talk behavior is unchanged.
+
+#### Speech runtime and model cache
+
+- Upgrade FluidAudio from 0.17.7 to 0.18.4.
+- Strengthen pre-load validation of compiled `.mlmodelc` bundles so missing or
+  truncated `model.mil` or weight files are rejected before Core ML loads them
+  on the Apple Neural Engine, and resume interrupted model downloads per file.
+- Pick up upstream Parakeet TDT v3 long-form decoding fixes for opening speech
+  and interior-pause punctuation.
+
+#### CoreAudio and documentation
+
+- Release CoreAudio `CFString` device properties in `audioObjectStringProperty`
+  according to Apple’s CoreAudio Create Rule, fixing a small memory leak during
+  audio device enumeration.
+- Refresh competitor comparison pages and roadmap release status.
+
+#### Validation and remaining coverage
+
+Native macOS builds, model-free self-tests, packaged-app smoke checks, release
+script self-tests, and dependency-provenance checks passed for the source
+changes. The final release archive is Developer ID signed and notarised through
+the release pipeline. Physical microphone and input testing, permission
+grant/revocation, target-app paste, sleep/wake, and hardware power-loss testing
+remain deferred. Those paths are not represented as qualified by the automated
+checks.
+
+Audio retention is unchanged. Audio and transcription remain local.
+
 <a id="macos-0.3.11"></a>
 
 ### macOS 0.3.11 (2026-10-31)
